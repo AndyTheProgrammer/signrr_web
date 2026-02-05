@@ -1,32 +1,43 @@
-// src/middleware.ts
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { updateSession } from '@/lib/supabase/middleware'
+import { type NextRequest, NextResponse } from 'next/server'
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
+  const { supabaseResponse, user } = await updateSession(request)
+
   const path = request.nextUrl.pathname
 
-  const isPublicPath = path === '/sign-in' || path === '/sign-up'
-  const token = request.cookies.get('token')?.value || ''
-//   const token = 'authenticated'
+  // Public paths that don't require authentication
+  const isAuthPath = path === '/sign-in' || path === '/sign-up'
 
+  // Guest signing path (doesn't require auth, uses magic token)
+  const isGuestSigningPath = path.startsWith('/sign/')
 
-  console.log("is Public Path: ", isPublicPath, "Token: " + token )
-
-  if (isPublicPath && token) {
+  // If user is authenticated and trying to access auth pages, redirect to dashboard
+  if (isAuthPath && user) {
     return NextResponse.redirect(new URL('/dashboard/home', request.url))
   }
 
-  if (!isPublicPath && !token) {
+  // Protected paths require authentication (unless it's a guest signing path)
+  const isProtectedPath = path.startsWith('/dashboard')
+
+  if (isProtectedPath && !user) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
   }
+
+  // Root path: redirect based on auth status
+  if (path === '/') {
+    if (user) {
+      return NextResponse.redirect(new URL('/dashboard/home', request.url))
+    } else {
+      return NextResponse.redirect(new URL('/sign-in', request.url))
+    }
+  }
+
+  return supabaseResponse
 }
 
-// See "Matching Paths" below to learn more
 export const config = {
   matcher: [
-    '/',
-    '/dashboard',
-    '/sign-in',
-    '/sign-up'
-  ]
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }

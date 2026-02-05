@@ -1,86 +1,131 @@
 "use client";
 
-import Button from "@/app/components/button";
-import Inputfield, { InputType } from "@/app/components/form/inputfield";
-import TopBar from "@/app/components/topBar";
-import { SIGN_IN_FIELDS } from "@/app/lib/formFields";
-import React from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
+import { toast } from "sonner";
 
-const SignInPage = () => {
+export default function SignInPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to sign in");
+      }
+
+      toast.success("Signed in successfully!");
+      router.push("/dashboard/home");
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col py-10 items-center">
-      <div>
-        <h1 className="text-4xl font-bold">Welcome Back To Signrr</h1>
-        <p className="text-lg py-5">Sign in to your account</p>
-
-        {/* Input fields */}
-        <div className="flex flex-col gap-10 py-5">
-          {SIGN_IN_FIELDS.map((item, index) => {
-            const { id, label, placeholder, type } = item;
-
-            if (type === "checkbox" && label === "Remember me") {
-              // Special layout for "Remember me" checkbox and "Forgot password" link
-              return (
-                <div
-                  key={index}
-                  className="flex items-center justify-between w-full"
-                >
-                  <Inputfield
-                    id={id}
-                    label={label} // This will be "Remember me"
-                    placeholder={placeholder}
-                    type={type as InputType}
-                    // You might add a className here if Inputfield needs width adjustment
-                    // e.g., className="flex-shrink-0" or className="mr-auto"
-                  />
-                  <a
-                    href="#"
-                    className="text-sm hover:underline cursor-pointer"
-                  >
-                    Forgot password?
-                  </a>
-                </div>
-              );
-            } else {
-              // Default layout for other input fields
-              return (
-                <Inputfield
-                  key={index}
-                  id={id}
-                  label={label}
-                  placeholder={placeholder}
-                  type={type as InputType}
-                />
-              );
-            }
-          })}
-        </div>
-
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
         <div>
-          <Button
-            onClick={() => console.log("button clicked")}
-            buttonTitle="Sign in"
-            className="w-full bg-black text-white hover:scale-105"
-          />
+          <h2 className="text-center text-3xl font-bold tracking-tight">
+            Welcome back to SignrR
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Sign in to your account
+          </p>
         </div>
 
-        {/* Now add the Button */}
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="space-y-4 rounded-md shadow-sm">
+            <div>
+              <Label htmlFor="email">Email address</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                placeholder="you@example.com"
+                className="mt-1"
+              />
+            </div>
 
-        <div className="flex flex-col py-20 gap-5">
-          <div className="flex items-center justify-center">
-            <h1>Dont have an account?</h1>
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={formData.password}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
+                placeholder="••••••••"
+                className="mt-1"
+              />
+            </div>
           </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <Link
+                href="#"
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </div>
+
           <div>
             <Button
-              onClick={() => console.log("button clicked")}
-              buttonTitle="Sign up"
-              className="w-full border-1 text-black hover:bg-gray-100"
-            />
+              type="submit"
+              className="w-full"
+              disabled={loading}
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
           </div>
-        </div>
+
+          <div className="text-center text-sm">
+            <span className="text-gray-600">Don't have an account? </span>
+            <Link
+              href="/sign-up"
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              Sign up
+            </Link>
+          </div>
+        </form>
       </div>
     </div>
   );
-};
-
-export default SignInPage;
+}
