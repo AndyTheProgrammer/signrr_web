@@ -1,12 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { SignatureCanvasComponent } from "@/components/signing/signature-canvas";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { SignaturePosition } from "@/types/database";
+
+// Dynamically import PDF viewer (client-only, react-pdf requires browser APIs)
+const PdfSignatureViewer = dynamic(
+  () =>
+    import("@/components/signing/pdf-signature-viewer").then(
+      (mod) => mod.PdfSignatureViewer
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    ),
+  }
+);
 
 interface SignerData {
   id: string;
@@ -19,11 +36,11 @@ interface DocumentData {
   id: string;
   title: string;
   file_path: string;
+  signing_mode: "simple" | "positioned";
 }
 
 export default function SignPage() {
   const params = useParams();
-  const router = useRouter();
   const token = params.token as string;
 
   const [loading, setLoading] = useState(true);
@@ -31,6 +48,7 @@ export default function SignPage() {
   const [submitting, setSubmitting] = useState(false);
   const [signer, setSigner] = useState<SignerData | null>(null);
   const [document, setDocument] = useState<DocumentData | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [alreadySigned, setAlreadySigned] = useState(false);
   const [notYourTurn, setNotYourTurn] = useState(false);
@@ -64,6 +82,11 @@ export default function SignPage() {
 
       setSigner(data.signer);
       setDocument(data.document);
+
+      // If positioned mode, fetch the PDF URL
+      if (data.document.signing_mode === "positioned") {
+        fetchPdfUrl();
+      }
     } catch (error: any) {
       setError(error.message);
       toast.error(error.message);
@@ -73,7 +96,24 @@ export default function SignPage() {
     }
   };
 
-  const handleSignatureSubmit = async (signatureData: string) => {
+  const fetchPdfUrl = async () => {
+    try {
+      const response = await fetch(`/api/sign/pdf-url?token=${token}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load PDF");
+      }
+
+      setPdfUrl(data.url);
+    } catch (error: any) {
+      toast.error("Failed to load document PDF");
+      console.error("PDF URL error:", error);
+    }
+  };
+
+  // Simple mode: just signature data
+  const handleSimpleSignatureSubmit = async (signatureData: string) => {
     if (!document || !signer) return;
 
     setSubmitting(true);
@@ -81,12 +121,45 @@ export default function SignPage() {
     try {
       const response = await fetch(`/api/sign/${document.id}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
           signature_data: signatureData,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit signature");
+      }
+
+      toast.success("Document signed successfully!");
+      setAlreadySigned(true);
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Positioned mode: signature data + position on PDF
+  const handlePositionedSignatureSubmit = async (
+    signatureData: string,
+    position: SignaturePosition
+  ) => {
+    if (!document || !signer) return;
+
+    setSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/sign/${document.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          signature_data: signatureData,
+          signature_position: position,
         }),
       });
 
@@ -145,12 +218,12 @@ export default function SignPage() {
           <CardHeader>
             <div className="flex items-center space-x-3">
               <CheckCircle2 className="h-8 w-8 text-green-500" />
-              <CardTitle>Already Signed</CardTitle>
+              <CardTitle>Document Signed</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 mb-4">
-              You have already signed this document. Thank you!
+              You have successfully signed this document. Thank you!
             </p>
             {document && (
               <div className="bg-gray-50 rounded-lg p-4 mt-4">
@@ -239,37 +312,45 @@ export default function SignPage() {
           </CardContent>
         </Card>
 
-        {/* Document Preview - Placeholder for now */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Document Preview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-gray-100 rounded-lg p-8 text-center">
-              <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">PDF preview will be displayed here</p>
-              <p className="text-sm text-gray-500 mt-2">
-                Coming soon: Interactive PDF viewer
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Signature Canvas */}
-        {submitting ? (
-          <Card>
-            <CardContent className="py-12">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Submitting your signature...</p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Signing UI - based on mode */}
+        {document.signing_mode === "positioned" ? (
+          // Positioned Mode: PDF viewer with click-to-place
+          pdfUrl ? (
+            <PdfSignatureViewer
+              pdfUrl={pdfUrl}
+              signerName={signer.full_name}
+              onSubmit={handlePositionedSignatureSubmit}
+              submitting={submitting}
+            />
+          ) : (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading document...</p>
+                </div>
+              </CardContent>
+            </Card>
+          )
         ) : (
-          <SignatureCanvasComponent
-            onSave={handleSignatureSubmit}
-            signerName={signer.full_name}
-          />
+          // Simple Mode: just the signature canvas
+          <>
+            {submitting ? (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Submitting your signature...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <SignatureCanvasComponent
+                onSave={handleSimpleSignatureSubmit}
+                signerName={signer.full_name}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

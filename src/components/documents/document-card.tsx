@@ -71,54 +71,52 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
   const StatusIcon = statusConfig.icon;
 
   return (
-    <Card className="hover:shadow-lg transition-shadow">
+    <Card className="hover:border-gray-300 transition-colors group">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-3 flex-1 min-w-0">
-            <FileText className="h-8 w-8 text-red-500 flex-shrink-0 mt-1" />
+            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+              <FileText className="h-5 w-5 text-red-500" />
+            </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-lg truncate">{document.title}</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Created {formatDistanceToNow(new Date(document.created_at), { addSuffix: true })}
+              <h3 className="font-semibold truncate">{document.title}</h3>
+              <p className="text-xs text-gray-400 mt-1">
+                {formatDistanceToNow(new Date(document.created_at), { addSuffix: true })}
               </p>
             </div>
           </div>
-          <Badge
-            variant={statusConfig.variant}
-            className={statusConfig.className}
-          >
-            <StatusIcon className="h-3 w-3 mr-1" />
-            {statusConfig.label}
-          </Badge>
         </div>
       </CardHeader>
 
       <CardContent className="pb-3">
+        <Badge
+          variant={statusConfig.variant}
+          className={statusConfig.className}
+        >
+          <StatusIcon className="h-3 w-3 mr-1" />
+          {statusConfig.label}
+        </Badge>
         {document.status === "completed" && document.completed_at && (
-          <p className="text-sm text-gray-600">
+          <p className="text-xs text-gray-400 mt-2">
             Completed {formatDistanceToNow(new Date(document.completed_at), { addSuffix: true })}
           </p>
         )}
       </CardContent>
 
-      <CardFooter className="flex justify-end space-x-2 pt-3 border-t">
-        <Button
-          variant="outline"
-          size="sm"
-          asChild
-        >
+      <CardFooter className="flex justify-between pt-3 border-t">
+        <Button variant="ghost" size="sm" asChild>
           <Link href={`/dashboard/documents/${document.id}`}>
-            <Eye className="h-4 w-4 mr-2" />
+            <Eye className="h-4 w-4 mr-1" />
             View
           </Link>
         </Button>
         <Button
-          variant="destructive"
+          variant="ghost"
           size="sm"
           onClick={handleDelete}
+          className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
         >
-          <Trash2 className="h-4 w-4 mr-2" />
-          Delete
+          <Trash2 className="h-4 w-4" />
         </Button>
       </CardFooter>
     </Card>

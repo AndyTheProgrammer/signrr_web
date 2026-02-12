@@ -1,113 +1,224 @@
-import Image from "next/image";
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import {
+  FileSignature,
+  Shield,
+  Zap,
+  Users,
+  ArrowRight,
+  CheckCircle2,
+} from "lucide-react";
 
-export default function Home() {
+export default function LandingPage() {
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Navbar */}
+      <nav className="border-b border-gray-100">
+        <div className="container mx-auto flex items-center justify-between px-6 py-4">
+          <Link href="/" className="flex items-center space-x-2">
+            <FileSignature className="h-7 w-7 text-blue-600" />
+            <span className="text-xl font-bold tracking-tight">SignrR</span>
+          </Link>
+          <div className="flex items-center space-x-3">
+            <Link
+              href="/sign-in"
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 px-4 py-2 transition-colors"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/sign-up"
+              className="text-sm font-medium text-white bg-neutral-900 hover:bg-neutral-800 px-4 py-2 rounded-lg transition-colors"
+            >
+              Get Started
+            </Link>
+          </div>
+        </div>
+      </nav>
 
-  // let token = '';
-  // token = 'authenticat';
+      {/* Hero */}
+      <section className="px-6 pt-20 pb-16 md:pt-28 md:pb-24">
+        <div className="container mx-auto max-w-4xl text-center">
+          <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm text-blue-700 mb-6">
+            <Zap className="h-3.5 w-3.5 mr-1.5" />
+            Fast, simple, and secure
+          </div>
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-gray-900 leading-tight">
+            Sign documents
+            <br />
+            <span className="text-blue-600">without the hassle</span>
+          </h1>
+          <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+            Upload a PDF, add your signers, and get documents signed in minutes.
+            No complicated setup, no learning curve.
+          </p>
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href="/sign-up"
+              className="inline-flex items-center justify-center text-sm font-medium text-white bg-neutral-900 hover:bg-neutral-800 h-12 px-8 rounded-lg transition-colors w-full sm:w-auto"
+            >
+              Start signing for free
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Link>
+            <Link
+              href="/sign-in"
+              className="inline-flex items-center justify-center text-sm font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 h-12 px-8 rounded-lg transition-colors w-full sm:w-auto"
+            >
+              I already have an account
+            </Link>
+          </div>
+        </div>
+      </section>
 
-  // if (token === 'authenticated'){
-  //   redirect('/sign-in')
-  // }else {
-  //   redirect('/sign-up')
-  // }
-  return null;
-    // <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-    //   <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-    //     <Image
-    //       className="dark:invert"
-    //       src="/next.svg"
-    //       alt="Next.js logo"
-    //       width={180}
-    //       height={38}
-    //       priority
-    //     />
-    //     <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-    //       <li className="mb-2 tracking-[-.01em]">
-    //         Get started by editing{" "}
-    //         <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-    //           src/app/page.tsx
-    //         </code>
-    //         .
-    //       </li>
-    //       <li className="tracking-[-.01em]">
-    //         Save and see your changes instantly.
-    //       </li>
-    //     </ol>
+      {/* How it works */}
+      <section className="px-6 py-16 md:py-24 bg-gray-50">
+        <div className="container mx-auto max-w-5xl">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
+            How it works
+          </h2>
+          <p className="text-gray-600 text-center mb-12 max-w-xl mx-auto">
+            Three steps to get your documents signed
+          </p>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                step: "1",
+                title: "Upload your document",
+                description:
+                  "Upload any PDF document and choose your signing mode — simple signature or positioned on the document.",
+              },
+              {
+                step: "2",
+                title: "Add your signers",
+                description:
+                  "Enter the names and emails of people who need to sign. They'll receive a secure link — no account needed.",
+              },
+              {
+                step: "3",
+                title: "Collect signatures",
+                description:
+                  "Signers draw their signature from any device. Once complete, download the fully signed PDF.",
+              },
+            ].map((item) => (
+              <div
+                key={item.step}
+                className="bg-white rounded-xl border border-gray-200 p-6"
+              >
+                <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold mb-4">
+                  {item.step}
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  {item.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-    //     <div className="flex gap-4 items-center flex-col sm:flex-row">
-    //       <a
-    //         className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-    //         href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-    //         target="_blank"
-    //         rel="noopener noreferrer"
-    //       >
-    //         <Image
-    //           className="dark:invert"
-    //           src="/vercel.svg"
-    //           alt="Vercel logomark"
-    //           width={20}
-    //           height={20}
-    //         />
-    //         Deploy now
-    //       </a>
-    //       <a
-    //         className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-    //         href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-    //         target="_blank"
-    //         rel="noopener noreferrer"
-    //       >
-    //         Read our docs
-    //       </a>
-    //     </div>
-    //   </main>
-    //   <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-    //     <a
-    //       className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-    //       href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-    //       target="_blank"
-    //       rel="noopener noreferrer"
-    //     >
-    //       <Image
-    //         aria-hidden
-    //         src="/file.svg"
-    //         alt="File icon"
-    //         width={16}
-    //         height={16}
-    //       />
-    //       Learn
-    //     </a>
-    //     <a
-    //       className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-    //       href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-    //       target="_blank"
-    //       rel="noopener noreferrer"
-    //     >
-    //       <Image
-    //         aria-hidden
-    //         src="/window.svg"
-    //         alt="Window icon"
-    //         width={16}
-    //         height={16}
-    //       />
-    //       Examples
-    //     </a>
-    //     <a
-    //       className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-    //       href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-    //       target="_blank"
-    //       rel="noopener noreferrer"
-    //     >
-    //       <Image
-    //         aria-hidden
-    //         src="/globe.svg"
-    //         alt="Globe icon"
-    //         width={16}
-    //         height={16}
-    //       />
-    //       Go to nextjs.org →
-    //     </a>
-    //   </footer>
-    // </div>
-  
+      {/* Features */}
+      <section className="px-6 py-16 md:py-24">
+        <div className="container mx-auto max-w-5xl">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
+            Everything you need
+          </h2>
+          <p className="text-gray-600 text-center mb-12 max-w-xl mx-auto">
+            Built for individuals and teams who want document signing to just work
+          </p>
+          <div className="grid md:grid-cols-2 gap-6">
+            {[
+              {
+                icon: Shield,
+                title: "Secure by default",
+                description:
+                  "Magic links with 48-hour expiry. Each signer gets a unique, time-limited signing token.",
+              },
+              {
+                icon: Users,
+                title: "No account required for signers",
+                description:
+                  "Your signers click a link and sign. They don't need to create an account or download anything.",
+              },
+              {
+                icon: FileSignature,
+                title: "Two signing modes",
+                description:
+                  "Simple mode for quick signatures, or positioned mode to place signatures exactly where they belong on the PDF.",
+              },
+              {
+                icon: Zap,
+                title: "Sequential workflow",
+                description:
+                  "Signers are notified in order. The next signer gets their email only after the previous one completes.",
+              },
+            ].map((feature) => (
+              <div
+                key={feature.title}
+                className="flex items-start space-x-4 rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <feature.icon className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">{feature.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="px-6 py-16 md:py-24 bg-gray-50">
+        <div className="container mx-auto max-w-2xl text-center">
+          <h2 className="text-2xl md:text-3xl font-bold mb-4">
+            Ready to get started?
+          </h2>
+          <p className="text-gray-600 mb-8">
+            Create your free account and send your first document for signing in
+            under a minute.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/sign-up"
+              className="inline-flex items-center justify-center text-sm font-medium text-white bg-neutral-900 hover:bg-neutral-800 h-11 px-6 rounded-lg transition-colors"
+            >
+              Create free account
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Link>
+          </div>
+          <div className="mt-6 flex items-center justify-center gap-6 text-sm text-gray-500">
+            <span className="flex items-center">
+              <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+              Free to use
+            </span>
+            <span className="flex items-center">
+              <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+              No credit card
+            </span>
+            <span className="flex items-center">
+              <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+              Setup in seconds
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 px-6 py-8">
+        <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center space-x-2">
+            <FileSignature className="h-5 w-5 text-blue-600" />
+            <span className="font-semibold">SignrR</span>
+          </div>
+          <p className="text-sm text-gray-500">
+            &copy; {new Date().getFullYear()} SignrR. All rights reserved.
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
 }

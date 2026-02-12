@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
           title,
           file_path,
           status,
+          signing_mode,
           current_signer_index
         )
       `
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest) {
         id: document.id,
         title: document.title,
         file_path: document.file_path,
+        signing_mode: document.signing_mode || "simple",
       },
     });
   } catch (error) {

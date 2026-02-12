@@ -34,6 +34,7 @@ export interface Database {
           id: string
           title: string
           file_path: string
+          signed_file_path: string | null
           status: 'draft' | 'pending' | 'completed'
           signing_mode: 'simple' | 'positioned'
           owner_id: string
@@ -45,6 +46,7 @@ export interface Database {
           id?: string
           title: string
           file_path: string
+          signed_file_path?: string | null
           status?: 'draft' | 'pending' | 'completed'
           signing_mode?: 'simple' | 'positioned'
           owner_id: string
@@ -56,6 +58,7 @@ export interface Database {
           id?: string
           title?: string
           file_path?: string
+          signed_file_path?: string | null
           status?: 'draft' | 'pending' | 'completed'
           signing_mode?: 'simple' | 'positioned'
           owner_id?: string

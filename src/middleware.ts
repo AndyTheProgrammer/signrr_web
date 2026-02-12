@@ -24,13 +24,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
   }
 
-  // Root path: redirect based on auth status
-  if (path === '/') {
-    if (user) {
-      return NextResponse.redirect(new URL('/dashboard/home', request.url))
-    } else {
-      return NextResponse.redirect(new URL('/sign-in', request.url))
-    }
+  // Root path: if logged in, go to dashboard; otherwise show landing page
+  if (path === '/' && user) {
+    return NextResponse.redirect(new URL('/dashboard/home', request.url))
   }
 
   return supabaseResponse

@@ -61,8 +61,19 @@ export default function DocumentDetailPage() {
   const handleDownload = async () => {
     if (!document) return;
 
-    toast.info("Download functionality coming soon!");
-    // TODO: Implement download in Phase 5
+    try {
+      const response = await fetch(`/api/documents/${documentId}/pdf-url`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to get download URL");
+      }
+
+      // Open the signed URL in a new tab to trigger download
+      window.open(data.url, "_blank");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to download PDF");
+    }
   };
 
   const getStatusConfig = (status: string) => {
@@ -118,7 +129,7 @@ export default function DocumentDetailPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
@@ -137,7 +148,7 @@ export default function DocumentDetailPage() {
   const StatusIcon = statusConfig.icon;
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
+    <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <Button
@@ -171,9 +182,9 @@ export default function DocumentDetailPage() {
 
       {/* Actions */}
       <div className="flex space-x-2 mb-6">
-        <Button onClick={handleDownload} disabled={document.status !== "completed"}>
+        <Button onClick={handleDownload} disabled={document.status === "draft"}>
           <Download className="h-4 w-4 mr-2" />
-          Download PDF
+          {document.status === "completed" ? "Download Signed PDF" : "Download PDF"}
         </Button>
         <Button
           variant="outline"

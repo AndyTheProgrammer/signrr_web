@@ -46,21 +46,19 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div>
-          <h2 className="text-center text-3xl font-bold tracking-tight">
-            Welcome back to SignrR
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your account
+    <div className="flex items-center justify-center px-4 py-16 sm:py-24">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <h1 className="text-xl font-semibold text-gray-900">Welcome back</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Sign in to your account to continue
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4 rounded-md shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 name="email"
@@ -72,7 +70,7 @@ export default function SignInPage() {
                   setFormData({ ...formData, email: e.target.value })
                 }
                 placeholder="you@example.com"
-                className="mt-1"
+                className="mt-1.5"
               />
             </div>
 
@@ -88,43 +86,26 @@ export default function SignInPage() {
                 onChange={(e) =>
                   setFormData({ ...formData, password: e.target.value })
                 }
-                placeholder="••••••••"
-                className="mt-1"
+                placeholder="Enter your password"
+                className="mt-1.5"
               />
             </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
-              <Link
-                href="#"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          <div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full mt-2" disabled={loading}>
               {loading ? "Signing in..." : "Sign in"}
             </Button>
-          </div>
+          </form>
+        </div>
 
-          <div className="text-center text-sm">
-            <span className="text-gray-600">Don't have an account? </span>
-            <Link
-              href="/sign-up"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
-              Sign up
-            </Link>
-          </div>
-        </form>
+        <p className="text-center text-sm text-gray-500 mt-6">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/sign-up"
+            className="font-medium text-blue-600 hover:text-blue-500"
+          >
+            Create one
+          </Link>
+        </p>
       </div>
     </div>
   );

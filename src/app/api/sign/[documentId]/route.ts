@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
+import { mergeSignaturesOntoPdf } from "@/lib/pdf/signer";
 
 const signSchema = z.object({
   token: z.string(),
   signature_data: z.string(),
+  signature_position: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      page: z.number(),
+    })
+    .optional(),
 });
 
 export async function POST(
@@ -27,7 +35,7 @@ export async function POST(
       );
     }
 
-    const { token, signature_data } = validation.data;
+    const { token, signature_data, signature_position } = validation.data;
 
     // Find signer by token
     const { data: signer, error: signerError } = await supabase
@@ -89,6 +97,7 @@ export async function POST(
       .update({
         status: "signed",
         signature_data,
+        signature_position: signature_position || null,
         signed_at: new Date().toISOString(),
       })
       .eq("id", signer.id);
@@ -189,20 +198,43 @@ export async function POST(
         },
       });
     } else {
-      // All signers have signed - mark document as completed
+      // All signers have signed - merge signatures onto PDF
+      let signedFilePath: string | null = null;
+      try {
+        const signedSigners = allSigners
+          .filter((s) => s.status === "signed" || s.id === signer.id)
+          .map((s) => ({
+            signature_data: s.id === signer.id ? signature_data : s.signature_data,
+            signature_position:
+              s.id === signer.id
+                ? signature_position || null
+                : s.signature_position || null,
+            signing_order: s.signing_order,
+            full_name: s.full_name,
+          }));
+
+        signedFilePath = await mergeSignaturesOntoPdf(
+          document.file_path,
+          signedSigners
+        );
+      } catch (mergeError) {
+        console.error("Error merging signatures onto PDF:", mergeError);
+        // Continue even if merge fails — signatures are saved in DB
+      }
+
+      // Mark document as completed
       const { error: completeDocError } = await supabase
         .from("documents")
         .update({
           status: "completed",
           completed_at: new Date().toISOString(),
+          ...(signedFilePath ? { signed_file_path: signedFilePath } : {}),
         })
         .eq("id", documentId);
 
       if (completeDocError) {
         console.error("Error completing document:", completeDocError);
       }
-
-      // TODO: Send completion emails to all signers and document owner
 
       return NextResponse.json({
         message: "Document signed successfully",
