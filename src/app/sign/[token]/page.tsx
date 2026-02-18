@@ -280,7 +280,7 @@ export default function SignPage() {
         <Card>
           <CardHeader>
             <div className="flex items-start space-x-4">
-              <FileText className="h-10 w-10 text-blue-600 mt-1" />
+              <FileText className="h-10 w-10 text-neutral-700 mt-1" />
               <div className="flex-1">
                 <CardTitle className="text-2xl">{document.title}</CardTitle>
                 <p className="text-gray-600 mt-2">
@@ -339,7 +339,7 @@ export default function SignPage() {
               <Card>
                 <CardContent className="py-12">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 mx-auto"></div>
                     <p className="mt-4 text-gray-600">Submitting your signature...</p>
                   </div>
                 </CardContent>

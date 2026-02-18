@@ -112,7 +112,7 @@ export function PdfSignatureViewer({
           <Card>
             <CardContent className="py-4">
               <div className="flex items-center space-x-3">
-                <MousePointerClick className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                <MousePointerClick className="h-5 w-5 text-neutral-700 flex-shrink-0" />
                 <p className="text-sm text-gray-700">
                   {signaturePosition
                     ? "Signature placed! You can click elsewhere to reposition, or confirm to submit."
@@ -203,7 +203,7 @@ export function PdfSignatureViewer({
                       transform: "translate(-50%, -50%)",
                     }}
                   >
-                    <div className="border-2 border-blue-500 rounded bg-white/80 p-1">
+                    <div className="border-2 border-neutral-900 rounded bg-white/80 p-1">
                       <img
                         src={signatureData}
                         alt="Your signature"

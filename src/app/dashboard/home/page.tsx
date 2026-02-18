@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { UploadDialog } from "@/components/documents/upload-dialog";
 import { DocumentList } from "@/components/documents/document-list";
-import { Upload, Plus, FileSignature } from "lucide-react";
+import { Upload, Plus, PenLine } from "lucide-react";
 import { DocumentsToSign } from "@/components/documents/documents-to-sign";
 
 export default function DashboardPage() {
@@ -34,7 +34,7 @@ export default function DashboardPage() {
       {/* Documents to Sign */}
       <div className="mb-10">
         <div className="flex items-center space-x-2 mb-4">
-          <FileSignature className="h-5 w-5 text-blue-600" />
+          <PenLine className="h-5 w-5 text-neutral-700" />
           <h2 className="text-base font-semibold">Awaiting Your Signature</h2>
         </div>
         <DocumentsToSign />

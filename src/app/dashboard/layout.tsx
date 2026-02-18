@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { FileSignature, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DashboardLayout({
@@ -28,12 +29,16 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="container mx-auto flex items-center justify-between px-6 py-3">
-          <Link
-            href="/dashboard/home"
-            className="flex items-center space-x-2"
-          >
-            <FileSignature className="h-6 w-6 text-blue-600" />
-            <span className="text-lg font-bold tracking-tight">SignrR</span>
+          <Link href="/dashboard/home">
+            <div className="overflow-hidden h-12">
+              <Image
+                src="/signrR_Logo_3-1.png"
+                alt="SignrR"
+                width={150}
+                height={150}
+                className="h-[150px] w-auto -mt-[58px]"
+              />
+            </div>
           </Link>
 
           <button

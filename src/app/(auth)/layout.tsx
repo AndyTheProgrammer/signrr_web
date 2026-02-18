@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileSignature } from "lucide-react";
+import Image from "next/image";
 
 export default function AuthLayout({
   children,
@@ -12,10 +12,17 @@ export default function AuthLayout({
     <div className="min-h-screen bg-gray-50">
       {/* Simple auth navbar */}
       <nav className="bg-white border-b border-gray-100">
-        <div className="container mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center space-x-2">
-            <FileSignature className="h-6 w-6 text-blue-600" />
-            <span className="text-lg font-bold tracking-tight">SignrR</span>
+        <div className="container mx-auto flex items-center justify-between px-6 py-3">
+          <Link href="/">
+            <div className="overflow-hidden h-12">
+              <Image
+                src="/signrR_Logo_3-1.png"
+                alt="SignrR"
+                width={150}
+                height={150}
+                className="h-[150px] w-auto -mt-[58px]"
+              />
+            </div>
           </Link>
         </div>
       </nav>

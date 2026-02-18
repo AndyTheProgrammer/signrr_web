@@ -1,22 +1,30 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
-  FileSignature,
   Shield,
   Zap,
   Users,
   ArrowRight,
   CheckCircle2,
+  PenLine,
 } from "lucide-react";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Navbar */}
-      <nav className="border-b border-gray-100">
-        <div className="container mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center space-x-2">
-            <FileSignature className="h-7 w-7 text-blue-600" />
-            <span className="text-xl font-bold tracking-tight">SignrR</span>
+      <nav className="bg-white border-b border-gray-100">
+        <div className="container mx-auto flex items-center justify-between px-6 py-3">
+          <Link href="/">
+            <div className="overflow-hidden h-12">
+              <Image
+                src="/signrR_Logo_3-1.png"
+                alt="SignrR"
+                width={150}
+                height={150}
+                className="h-[150px] w-auto -mt-[58px]"
+              />
+            </div>
           </Link>
           <div className="flex items-center space-x-3">
             <Link
@@ -38,14 +46,14 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="px-6 pt-20 pb-16 md:pt-28 md:pb-24">
         <div className="container mx-auto max-w-4xl text-center">
-          <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm text-blue-700 mb-6">
+          <div className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-4 py-1.5 text-sm text-neutral-700 mb-6">
             <Zap className="h-3.5 w-3.5 mr-1.5" />
             Fast, simple, and secure
           </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-gray-900 leading-tight">
             Sign documents
             <br />
-            <span className="text-blue-600">without the hassle</span>
+            <span className="text-neutral-500">without the hassle</span>
           </h1>
           <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
             Upload a PDF, add your signers, and get documents signed in minutes.
@@ -103,7 +111,7 @@ export default function LandingPage() {
                 key={item.step}
                 className="bg-white rounded-xl border border-gray-200 p-6"
               >
-                <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold mb-4">
+                <div className="w-9 h-9 rounded-full bg-neutral-900 text-white flex items-center justify-center text-sm font-bold mb-4">
                   {item.step}
                 </div>
                 <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
@@ -140,7 +148,7 @@ export default function LandingPage() {
                   "Your signers click a link and sign. They don't need to create an account or download anything.",
               },
               {
-                icon: FileSignature,
+                icon: PenLine,
                 title: "Two signing modes",
                 description:
                   "Simple mode for quick signatures, or positioned mode to place signatures exactly where they belong on the PDF.",
@@ -156,8 +164,8 @@ export default function LandingPage() {
                 key={feature.title}
                 className="flex items-start space-x-4 rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors"
               >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-                  <feature.icon className="h-5 w-5 text-blue-600" />
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-neutral-100 flex items-center justify-center">
+                  <feature.icon className="h-5 w-5 text-neutral-700" />
                 </div>
                 <div>
                   <h3 className="font-semibold mb-1">{feature.title}</h3>
@@ -192,15 +200,15 @@ export default function LandingPage() {
           </div>
           <div className="mt-6 flex items-center justify-center gap-6 text-sm text-gray-500">
             <span className="flex items-center">
-              <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 mr-1.5 text-neutral-900" />
               Free to use
             </span>
             <span className="flex items-center">
-              <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 mr-1.5 text-neutral-900" />
               No credit card
             </span>
             <span className="flex items-center">
-              <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 mr-1.5 text-neutral-900" />
               Setup in seconds
             </span>
           </div>
@@ -210,9 +218,14 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-gray-200 px-6 py-8">
         <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center space-x-2">
-            <FileSignature className="h-5 w-5 text-blue-600" />
-            <span className="font-semibold">SignrR</span>
+          <div className="overflow-hidden h-8">
+            <Image
+              src="/signrR_Logo_3-1.png"
+              alt="SignrR"
+              width={100}
+              height={100}
+              className="h-[100px] w-auto -mt-[42px]"
+            />
           </div>
           <p className="text-sm text-gray-500">
             &copy; {new Date().getFullYear()} SignrR. All rights reserved.

@@ -74,8 +74,8 @@ export function SignatureCanvasComponent({
           </div>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-sm text-blue-800">
+        <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3">
+          <p className="text-sm text-neutral-700">
             <strong>Note:</strong> By signing this document, you agree that your electronic
             signature is legally binding.
           </p>

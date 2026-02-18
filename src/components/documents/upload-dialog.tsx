@@ -127,7 +127,7 @@ export function UploadDialog({
             <div
               className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
                 dragActive
-                  ? "border-blue-500 bg-blue-50"
+                  ? "border-neutral-900 bg-neutral-50"
                   : "border-gray-300 hover:border-gray-400"
               }`}
               onDragEnter={handleDrag}
@@ -140,7 +140,7 @@ export function UploadDialog({
                 Drag and drop your PDF here, or
               </p>
               <label className="mt-2 inline-block">
-                <span className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-500">
+                <span className="cursor-pointer text-sm font-medium text-neutral-900 hover:text-neutral-700 underline">
                   browse files
                 </span>
                 <input
@@ -181,7 +181,7 @@ export function UploadDialog({
                   <label
                     className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                       signingMode === "simple"
-                        ? "border-blue-500 bg-blue-50"
+                        ? "border-neutral-900 bg-neutral-50"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
@@ -195,7 +195,7 @@ export function UploadDialog({
                     />
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
-                        <PenTool className="h-4 w-4 text-blue-600" />
+                        <PenTool className="h-4 w-4 text-neutral-700" />
                         <span className="font-medium text-sm">Simple Signature</span>
                       </div>
                       <p className="text-xs text-gray-600 mt-1">
@@ -207,7 +207,7 @@ export function UploadDialog({
                   <label
                     className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                       signingMode === "positioned"
-                        ? "border-blue-500 bg-blue-50"
+                        ? "border-neutral-900 bg-neutral-50"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
@@ -221,7 +221,7 @@ export function UploadDialog({
                     />
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
-                        <MousePointerClick className="h-4 w-4 text-blue-600" />
+                        <MousePointerClick className="h-4 w-4 text-neutral-700" />
                         <span className="font-medium text-sm">Positioned Signature</span>
                       </div>
                       <p className="text-xs text-gray-600 mt-1">

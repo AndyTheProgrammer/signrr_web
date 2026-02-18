@@ -242,7 +242,7 @@ export default function DocumentDetailPage() {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all"
+                    className="bg-neutral-900 h-2 rounded-full transition-all"
                     style={{
                       width: `${
                         (document.signers.filter((s) => s.status === "signed").length /
@@ -276,8 +276,8 @@ export default function DocumentDetailPage() {
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        <span className="text-sm font-medium text-blue-600">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center">
+                        <span className="text-sm font-medium text-neutral-700">
                           {signer.signing_order}
                         </span>
                       </div>

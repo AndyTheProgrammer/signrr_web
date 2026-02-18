@@ -133,8 +133,8 @@ export function AddSignersDialog({
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <span className="text-sm font-medium text-blue-600">
+                  <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center">
+                    <span className="text-sm font-medium text-neutral-700">
                       {index + 1}
                     </span>
                   </div>

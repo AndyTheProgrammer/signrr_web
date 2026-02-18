@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  FileSignature,
+  PenLine,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -60,7 +60,7 @@ export function DocumentsToSign() {
   if (documents.length === 0) {
     return (
       <div className="text-center py-8">
-        <FileSignature className="mx-auto h-10 w-10 text-gray-400" />
+        <PenLine className="mx-auto h-10 w-10 text-gray-400" />
         <p className="mt-2 text-sm text-gray-500">
           No documents waiting for your signature
         </p>
@@ -75,7 +75,7 @@ export function DocumentsToSign() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3 min-w-0">
-                <FileSignature className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                <PenLine className="h-5 w-5 text-neutral-700 flex-shrink-0" />
                 <div className="min-w-0">
                   <p className="font-medium truncate">{doc.title}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
