@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { Document, Signer } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,11 +16,16 @@ import {
   CheckCircle2,
   FileSignature,
   Mail,
+  RefreshCw,
+  Ban,
+  XCircle,
+  PenLine,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
 import { AddSignersDialog } from "@/components/signing/add-signers-dialog";
+import { SelfSignDialog } from "@/components/signing/self-sign-dialog";
 
 interface DocumentWithSigners extends Document {
   signers: Signer[];
@@ -32,7 +38,25 @@ export default function DocumentDetailPage() {
 
   const [document, setDocument] = useState<DocumentWithSigners | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ownerName, setOwnerName] = useState("");
   const [addSignersDialogOpen, setAddSignersDialogOpen] = useState(false);
+  const [selfSignDialogOpen, setSelfSignDialogOpen] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (data.user) {
+          setOwnerName(
+            data.user.user_metadata?.full_name ||
+            data.user.email ||
+            "You"
+          );
+        }
+      });
+  }, []);
 
   useEffect(() => {
     fetchDocument();
@@ -55,6 +79,40 @@ export default function DocumentDetailPage() {
       router.push("/dashboard/home");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async (signerId: string) => {
+    setResendingId(signerId);
+    try {
+      const response = await fetch(`/api/documents/${documentId}/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signer_id: signerId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to resend");
+      toast.success("Signing link resent successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to resend link");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!window.confirm("Cancel this document? Signers will no longer be able to sign it.")) return;
+    setCancelling(true);
+    try {
+      const response = await fetch(`/api/documents/${documentId}/cancel`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to cancel");
+      toast.success("Document cancelled");
+      fetchDocument();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to cancel document");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -96,6 +154,13 @@ export default function DocumentDetailPage() {
           variant: "default" as const,
           icon: CheckCircle2,
           className: "bg-green-500 hover:bg-green-600",
+        };
+      case "cancelled":
+        return {
+          label: "Cancelled",
+          variant: "secondary" as const,
+          icon: XCircle,
+          className: "bg-red-100 text-red-700 hover:bg-red-100",
         };
       default:
         return {
@@ -194,6 +259,23 @@ export default function DocumentDetailPage() {
           <UserPlus className="h-4 w-4 mr-2" />
           Add Signers
         </Button>
+        {document.status === "draft" && (!document.signers || document.signers.length === 0) && (
+          <Button onClick={() => setSelfSignDialogOpen(true)}>
+            <PenLine className="h-4 w-4 mr-2" />
+            Sign Yourself
+          </Button>
+        )}
+        {document.status === "pending" && (
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+          >
+            <Ban className="h-4 w-4 mr-2" />
+            {cancelling ? "Cancelling..." : "Cancel Document"}
+          </Button>
+        )}
       </div>
 
       {/* Document Info */}
@@ -294,7 +376,22 @@ export default function DocumentDetailPage() {
                         )}
                       </div>
                     </div>
-                    {getSignerStatusBadge(signer.status)}
+                    <div className="flex items-center space-x-2">
+                      {getSignerStatusBadge(signer.status)}
+                      {signer.status === "pending" &&
+                        signer.signing_order === document.current_signer_index + 1 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleResend(signer.id)}
+                            disabled={resendingId === signer.id}
+                            className="text-gray-500 hover:text-gray-900 text-xs"
+                          >
+                            <RefreshCw className={`h-3 w-3 mr-1 ${resendingId === signer.id ? "animate-spin" : ""}`} />
+                            Resend
+                          </Button>
+                        )}
+                    </div>
                   </div>
                 ))}
             </div>
@@ -325,6 +422,19 @@ export default function DocumentDetailPage() {
         documentId={documentId}
         onSuccess={fetchDocument}
       />
+
+      {/* Self-sign Dialog */}
+      {document && (
+        <SelfSignDialog
+          open={selfSignDialogOpen}
+          onOpenChange={setSelfSignDialogOpen}
+          documentId={documentId}
+          documentTitle={document.title}
+          signingMode={document.signing_mode}
+          signerName={ownerName}
+          onSuccess={fetchDocument}
+        />
+      )}
     </div>
   );
 }

@@ -119,7 +119,7 @@ export type Signer = Database['public']['Tables']['signers']['Row']
 export type DocumentStatus = 'draft' | 'pending' | 'completed'
 export type SignerStatus = 'pending' | 'signed'
 export type SigningMode = 'simple' | 'positioned'
-export type SignaturePosition = { x: number; y: number; page: number }
+export type SignaturePosition = { x: number; y: number; page: number; width?: number }
 
 // Extended types with relations
 export type DocumentWithSigners = Document & {

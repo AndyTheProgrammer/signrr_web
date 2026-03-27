@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { SignaturePosition } from "@/types/database";
+import { Annotation } from "@/lib/pdf/signer";
 
 // Dynamically import PDF viewer (client-only, react-pdf requires browser APIs)
 const PdfSignatureViewer = dynamic(
@@ -143,10 +144,11 @@ export default function SignPage() {
     }
   };
 
-  // Positioned mode: signature data + position on PDF
+  // Positioned mode: signature data + position + optional text/date annotations
   const handlePositionedSignatureSubmit = async (
     signatureData: string,
-    position: SignaturePosition
+    position: SignaturePosition,
+    annotations: Annotation[] = []
   ) => {
     if (!document || !signer) return;
 
@@ -160,6 +162,7 @@ export default function SignPage() {
           token,
           signature_data: signatureData,
           signature_position: position,
+          annotations,
         }),
       });
 

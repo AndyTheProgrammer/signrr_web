@@ -1,19 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
 import { mergeSignaturesOntoPdf } from "@/lib/pdf/signer";
+
+const annotationSchema = z.object({
+  type: z.enum(["text", "date"]),
+  content: z.string(),
+  x: z.number(),
+  y: z.number(),
+  page: z.number(),
+});
 
 const signSchema = z.object({
   token: z.string(),
   signature_data: z.string(),
   signature_position: z
-    .object({
-      x: z.number(),
-      y: z.number(),
-      page: z.number(),
-    })
+    .object({ x: z.number(), y: z.number(), page: z.number() })
     .optional(),
+  annotations: z.array(annotationSchema).optional(),
 });
 
 export async function POST(
@@ -22,12 +28,11 @@ export async function POST(
 ) {
   try {
     const { documentId } = await params;
-    const supabase = await createClient();
+    // Use service client so RLS doesn't block unauthenticated magic-link signers
+    const supabase = createServiceClient();
 
-    // Parse and validate request body
     const body = await request.json();
     const validation = signSchema.safeParse(body);
-
     if (!validation.success) {
       return NextResponse.json(
         { error: validation.error.errors[0].message },
@@ -35,7 +40,8 @@ export async function POST(
       );
     }
 
-    const { token, signature_data, signature_position } = validation.data;
+    const { token, signature_data, signature_position, annotations } =
+      validation.data;
 
     // Find signer by token
     const { data: signer, error: signerError } = await supabase
@@ -46,27 +52,15 @@ export async function POST(
       .single();
 
     if (signerError || !signer) {
-      return NextResponse.json(
-        { error: "Invalid signing token" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Invalid signing token" }, { status: 404 });
     }
 
-    // Check if already signed
     if (signer.status === "signed") {
-      return NextResponse.json(
-        { error: "Document already signed" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Document already signed" }, { status: 400 });
     }
 
-    // Check if token expired
-    const expiryDate = new Date(signer.magic_token_expires_at);
-    if (expiryDate < new Date()) {
-      return NextResponse.json(
-        { error: "Signing link has expired" },
-        { status: 410 }
-      );
+    if (new Date(signer.magic_token_expires_at) < new Date()) {
+      return NextResponse.json({ error: "Signing link has expired" }, { status: 410 });
     }
 
     // Get document
@@ -77,40 +71,31 @@ export async function POST(
       .single();
 
     if (docError || !document) {
-      return NextResponse.json(
-        { error: "Document not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    // Verify it's this signer's turn
     if (signer.signing_order - 1 !== document.current_signer_index) {
-      return NextResponse.json(
-        { error: "Not your turn to sign" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Not your turn to sign" }, { status: 403 });
     }
 
-    // Update signer record
+    // Save signature + annotations on signer record
     const { error: updateSignerError } = await supabase
       .from("signers")
       .update({
         status: "signed",
         signature_data,
         signature_position: signature_position || null,
+        annotations_data: annotations && annotations.length > 0 ? annotations : null,
         signed_at: new Date().toISOString(),
       })
       .eq("id", signer.id);
 
     if (updateSignerError) {
       console.error("Error updating signer:", updateSignerError);
-      return NextResponse.json(
-        { error: "Failed to save signature" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Failed to save signature" }, { status: 500 });
     }
 
-    // Get all signers to check if there are more
+    // Fetch all signers
     const { data: allSigners, error: allSignersError } = await supabase
       .from("signers")
       .select("*")
@@ -118,7 +103,6 @@ export async function POST(
       .order("signing_order", { ascending: true });
 
     if (allSignersError || !allSigners) {
-      console.error("Error fetching signers:", allSignersError);
       return NextResponse.json(
         { error: "Failed to process signing workflow" },
         { status: 500 }
@@ -126,24 +110,16 @@ export async function POST(
     }
 
     const nextSignerIndex = document.current_signer_index + 1;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    // Check if there are more signers
     if (nextSignerIndex < allSigners.length) {
-      // Move to next signer
-      const { error: updateDocError } = await supabase
+      // ── More signers remain — advance to next ──
+      await supabase
         .from("documents")
-        .update({
-          current_signer_index: nextSignerIndex,
-        })
+        .update({ current_signer_index: nextSignerIndex })
         .eq("id", documentId);
 
-      if (updateDocError) {
-        console.error("Error updating document:", updateDocError);
-      }
-
-      // Send email to next signer
       const nextSigner = allSigners[nextSignerIndex];
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       const signingUrl = `${appUrl}/sign/${nextSigner.magic_token}`;
 
       try {
@@ -151,40 +127,19 @@ export async function POST(
           to: nextSigner.email,
           subject: `Your turn to sign "${document.title}"`,
           html: `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Document Signature Request</title>
-              </head>
-              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
-                  <h1 style="color: #1a1a1a; margin-top: 0; font-size: 24px;">It's Your Turn to Sign!</h1>
-                  <p style="font-size: 16px; margin-bottom: 20px;">
-                    Hello ${nextSigner.full_name},
-                  </p>
-                  <p style="font-size: 16px; margin-bottom: 20px;">
-                    The previous signer has completed their signature. It's now your turn to sign <strong>"${document.title}"</strong>.
-                  </p>
-                  <p style="font-size: 16px; margin-bottom: 30px;">
-                    You are signer #${nextSigner.signing_order} in the signing sequence.
-                  </p>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${signingUrl}" style="background-color: #0070f3; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 16px; display: inline-block;">
-                      Sign Document Now
-                    </a>
-                  </div>
-                  <p style="font-size: 14px; color: #666; margin-top: 30px;">
-                    This link will expire in 48 hours.
-                  </p>
+            <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+              <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
+                <h2 style="margin-top:0;">It's Your Turn to Sign</h2>
+                <p>Hello ${nextSigner.full_name},</p>
+                <p>The previous signer has completed their signature. Please sign <strong>"${document.title}"</strong> now.</p>
+                <div style="text-align:center;margin:30px 0;">
+                  <a href="${signingUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
+                    Sign Document Now
+                  </a>
                 </div>
-                <div style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
-                  <p>Powered by SignrR - Digital Document Signing</p>
-                </div>
-              </body>
-            </html>
-          `,
+                <p style="font-size:13px;color:#666;">This link expires in 48 hours.</p>
+              </div>
+            </body>`,
         });
       } catch (emailError) {
         console.error("Error sending email to next signer:", emailError);
@@ -192,38 +147,32 @@ export async function POST(
 
       return NextResponse.json({
         message: "Signature saved successfully",
-        nextSigner: {
-          order: nextSigner.signing_order,
-          name: nextSigner.full_name,
-        },
+        nextSigner: { order: nextSigner.signing_order, name: nextSigner.full_name },
       });
     } else {
-      // All signers have signed - merge signatures onto PDF
+      // ── All signers done — merge PDF ──
       let signedFilePath: string | null = null;
       try {
-        const signedSigners = allSigners
-          .filter((s) => s.status === "signed" || s.id === signer.id)
-          .map((s) => ({
-            signature_data: s.id === signer.id ? signature_data : s.signature_data,
-            signature_position:
-              s.id === signer.id
-                ? signature_position || null
-                : s.signature_position || null,
-            signing_order: s.signing_order,
-            full_name: s.full_name,
-          }));
+        const signedSigners = allSigners.map((s) => ({
+          signature_data: s.id === signer.id ? signature_data : s.signature_data,
+          signature_position:
+            s.id === signer.id
+              ? signature_position || null
+              : s.signature_position || null,
+          annotations:
+            s.id === signer.id
+              ? annotations || []
+              : (s.annotations_data as any[]) || [],
+          signing_order: s.signing_order,
+          full_name: s.full_name,
+        }));
 
-        signedFilePath = await mergeSignaturesOntoPdf(
-          document.file_path,
-          signedSigners
-        );
+        signedFilePath = await mergeSignaturesOntoPdf(document.file_path, signedSigners);
       } catch (mergeError) {
         console.error("Error merging signatures onto PDF:", mergeError);
-        // Continue even if merge fails — signatures are saved in DB
       }
 
-      // Mark document as completed
-      const { error: completeDocError } = await supabase
+      await supabase
         .from("documents")
         .update({
           status: "completed",
@@ -232,20 +181,42 @@ export async function POST(
         })
         .eq("id", documentId);
 
-      if (completeDocError) {
-        console.error("Error completing document:", completeDocError);
+      // ── Email document owner ──
+      try {
+        const { data: ownerProfile } = await supabase
+          .from("user_profiles")
+          .select("email, full_name")
+          .eq("id", document.owner_id)
+          .single();
+
+        if (ownerProfile?.email) {
+          const dashboardUrl = `${appUrl}/dashboard/documents/${documentId}`;
+          await sendEmail({
+            to: ownerProfile.email,
+            subject: `"${document.title}" has been fully signed`,
+            html: `
+              <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
+                  <h2 style="margin-top:0;">Document Fully Signed ✓</h2>
+                  <p>Hello ${ownerProfile.full_name || "there"},</p>
+                  <p>All signers have completed their signatures on <strong>"${document.title}"</strong>.</p>
+                  <div style="text-align:center;margin:30px 0;">
+                    <a href="${dashboardUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
+                      Download Signed Document
+                    </a>
+                  </div>
+                </div>
+              </body>`,
+          });
+        }
+      } catch (ownerEmailError) {
+        console.error("Error sending completion email to owner:", ownerEmailError);
       }
 
-      return NextResponse.json({
-        message: "Document signed successfully",
-        completed: true,
-      });
+      return NextResponse.json({ message: "Document signed successfully", completed: true });
     }
   } catch (error) {
     console.error("Error in sign route:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
