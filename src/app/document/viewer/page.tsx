@@ -1,24 +1,25 @@
 "use client";
 
 import PdfViewer from "@/app/components/pdf/viewer";
-import { useParams, useSearchParams } from "next/navigation";
-import React from "react";
+import { useSearchParams } from "next/navigation";
+import React, { Suspense } from "react";
 
-const DocumentViewerPage = () => {
+const DocumentViewerContent = () => {
   const params = useSearchParams();
-  // console.log(params);
-
-  //
-  const pdfUrl = params.get("pdfUrl");
-  //URl decode it
-  decodeURIComponent(pdfUrl!);
-
-  // console.log(pdfUrl);
+  const pdfUrl = decodeURIComponent(params.get("pdfUrl") ?? "");
 
   return (
     <div>
-      <PdfViewer pdfUrl={pdfUrl!} title="" />
+      <PdfViewer pdfUrl={pdfUrl} title="" />
     </div>
+  );
+};
+
+const DocumentViewerPage = () => {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" /></div>}>
+      <DocumentViewerContent />
+    </Suspense>
   );
 };
 
