@@ -30,7 +30,7 @@ export function SignatureCanvasComponent({
 
     // Export as transparent PNG — the CSS `background: white` is visual only,
     // the canvas pixel data has no white fill so signature renders cleanly on PDFs.
-    const signatureData = sigCanvasRef.current.toDataURL("image/png");
+    const signatureData = sigCanvasRef.current!.toDataURL("image/png");
     onSave(signatureData);
   };
 
