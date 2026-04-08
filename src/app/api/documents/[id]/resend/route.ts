@@ -71,26 +71,39 @@ export async function POST(
       );
     }
 
-    // Generate fresh token with 48h expiry
-    const newToken = crypto.randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    // Check if existing token is still valid (within 48h window)
+    const expiryDate = new Date(signer.magic_token_expires_at);
+    const isTokenValid = expiryDate > new Date();
 
-    const { error: updateError } = await supabase
-      .from("signers")
-      .update({
-        magic_token: newToken,
-        magic_token_expires_at: expiresAt,
-      })
-      .eq("id", signer_id);
+    let tokenToUse: string;
+    let expiresAt: string;
 
-    if (updateError) {
-      console.error("Error updating token:", updateError);
-      return NextResponse.json({ error: "Failed to regenerate link" }, { status: 500 });
+    if (isTokenValid) {
+      // Reuse existing token if still valid
+      tokenToUse = signer.magic_token;
+      expiresAt = signer.magic_token_expires_at;
+    } else {
+      // Generate fresh token only if expired
+      tokenToUse = crypto.randomBytes(32).toString("base64url");
+      expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+      const { error: updateError } = await supabase
+        .from("signers")
+        .update({
+          magic_token: tokenToUse,
+          magic_token_expires_at: expiresAt,
+        })
+        .eq("id", signer_id);
+
+      if (updateError) {
+        console.error("Error updating token:", updateError);
+        return NextResponse.json({ error: "Failed to regenerate link" }, { status: 500 });
+      }
     }
 
     // Send email
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const signingUrl = `${appUrl}/sign/${newToken}`;
+    const signingUrl = `${appUrl}/sign/${tokenToUse}`;
 
     await sendEmail({
       to: signer.email,
@@ -106,7 +119,7 @@ export async function POST(
                 Sign Document Now
               </a>
             </div>
-            <p style="font-size:13px;color:#666;">This link expires in 48 hours. Any previous links are now invalid.</p>
+            <p style="font-size:13px;color:#666;">This link expires in 48 hours${!isTokenValid ? ". Any previous links are now invalid." : "."}</p>
           </div>
         </body>`,
     });
