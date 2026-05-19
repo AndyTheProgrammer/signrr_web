@@ -20,7 +20,10 @@ import {
   Ban,
   XCircle,
   PenLine,
+  Send,
+  Loader2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -43,6 +46,9 @@ export default function DocumentDetailPage() {
   const [selfSignDialogOpen, setSelfSignDialogOpen] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [sendEmailInput, setSendEmailInput] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     createClient()
@@ -131,6 +137,28 @@ export default function DocumentDetailPage() {
       window.open(data.url, "_blank");
     } catch (error: any) {
       toast.error(error.message || "Failed to download PDF");
+    }
+  };
+
+  const handleSendEmail = async () => {
+    const trimmed = sendEmailInput.trim();
+    if (!trimmed || !document) return;
+    setSendingEmail(true);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send");
+      toast.success(`Document sent to ${trimmed}`);
+      setSendEmailInput("");
+      setSendEmailOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send email");
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -246,11 +274,26 @@ export default function DocumentDetailPage() {
       </div>
 
       {/* Actions */}
-      <div className="flex space-x-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-4">
         <Button onClick={handleDownload} disabled={document.status === "draft"}>
           <Download className="h-4 w-4 mr-2" />
           {document.status === "completed" ? "Download Signed PDF" : "Download PDF"}
         </Button>
+
+        {/* Send by Email — only for completed documents */}
+        {document.status === "completed" && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSendEmailOpen((v) => !v);
+              setSendEmailInput("");
+            }}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Send by Email
+          </Button>
+        )}
+
         <Button
           variant="outline"
           onClick={() => setAddSignersDialogOpen(true)}
@@ -277,6 +320,47 @@ export default function DocumentDetailPage() {
           </Button>
         )}
       </div>
+
+      {/* Send by Email inline panel */}
+      {sendEmailOpen && document.status === "completed" && (
+        <div className="mb-6 border rounded-xl p-4 bg-gray-50 space-y-3">
+          <div className="flex items-center space-x-2">
+            <Mail className="h-4 w-4 text-neutral-700" />
+            <p className="text-sm font-medium text-gray-800">
+              Send signed document by email
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="email"
+              placeholder="recipient@example.com"
+              value={sendEmailInput}
+              onChange={(e) => setSendEmailInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSendEmail();
+                if (e.key === "Escape") setSendEmailOpen(false);
+              }}
+              className="flex-1"
+              autoFocus
+              disabled={sendingEmail}
+            />
+            <Button
+              onClick={handleSendEmail}
+              disabled={sendingEmail || !sendEmailInput.trim()}
+            >
+              {sendingEmail ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              {sendingEmail ? "Sending…" : "Send"}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400">
+            The signed PDF will be attached directly to the email.
+          </p>
+        </div>
+      )}
 
       {/* Document Info */}
       <div className="grid gap-6 md:grid-cols-2 mb-6">

@@ -47,7 +47,9 @@ export function UploadDialog({
   const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [extraFiles, setExtraFiles] = useState<File[]>([]); // additional files for multi-upload
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [signingMode, setSigningMode] = useState<SigningMode>("simple");
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -57,10 +59,14 @@ export function UploadDialog({
   const [signers, setSigners] = useState<Signer[]>([{ email: "", full_name: "" }]);
   const [submittingSigners, setSubmittingSigners] = useState(false);
 
+  const isMultiMode = extraFiles.length > 0;
+
   const resetAll = () => {
     setStep("upload");
     setFile(null);
+    setExtraFiles([]);
     setUploading(false);
+    setUploadProgress(null);
     setDragActive(false);
     setSigningMode("simple");
     setDocumentId(null);
@@ -85,48 +91,100 @@ export function UploadDialog({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files?.[0]) handleFileSelect(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files?.length) {
+      handleFilesSelect(Array.from(e.dataTransfer.files));
+    }
   };
 
-  const handleFileSelect = (selectedFile: File) => {
-    if (selectedFile.type !== "application/pdf") {
-      toast.error("Only PDF files are allowed");
-      return;
-    }
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      toast.error("File size must be less than 10MB");
-      return;
-    }
-    setFile(selectedFile);
+  const validateFile = (f: File): string | null => {
+    if (f.type !== "application/pdf") return `${f.name}: only PDF files are allowed`;
+    if (f.size > 10 * 1024 * 1024) return `${f.name}: must be less than 10MB`;
+    return null;
   };
+
+  const handleFilesSelect = (selected: File[]) => {
+    const errors: string[] = [];
+    const valid: File[] = [];
+    for (const f of selected) {
+      const err = validateFile(f);
+      if (err) errors.push(err);
+      else valid.push(f);
+    }
+    if (errors.length) toast.error(errors[0]);
+    if (!valid.length) return;
+    if (valid.length === 1) {
+      setFile(valid[0]);
+      setExtraFiles([]);
+    } else {
+      setFile(valid[0]);
+      setExtraFiles(valid.slice(1));
+    }
+  };
+
+  const handleFileSelect = (selectedFile: File) => handleFilesSelect([selectedFile]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) handleFileSelect(e.target.files[0]);
+    if (e.target.files?.length) handleFilesSelect(Array.from(e.target.files));
+  };
+
+  const removeExtraFile = (index: number) =>
+    setExtraFiles((prev) => prev.filter((_, i) => i !== index));
+
+  const uploadSingleFile = async (f: File, mode: SigningMode) => {
+    const formData = new FormData();
+    formData.append("file", f);
+    formData.append("signing_mode", mode);
+    const response = await fetch("/api/documents/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to upload document");
+    return data.document;
   };
 
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("signing_mode", signingMode);
 
-      const response = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to upload document");
-
-      setDocumentId(data.document.id);
-      setDocumentTitle(data.document.title);
-      setStep("signers");
-    } catch (error: any) {
-      toast.error(error.message || "An error occurred");
-    } finally {
+    if (isMultiMode) {
+      // Multi-file path: upload all, then close and refresh
+      const allFiles = [file, ...extraFiles];
+      setUploadProgress({ done: 0, total: allFiles.length });
+      let successCount = 0;
+      for (let i = 0; i < allFiles.length; i++) {
+        try {
+          await uploadSingleFile(allFiles[i], "positioned");
+          successCount++;
+        } catch (err: any) {
+          toast.error(`${allFiles[i].name}: ${err.message}`);
+        }
+        setUploadProgress({ done: i + 1, total: allFiles.length });
+      }
       setUploading(false);
+      setUploadProgress(null);
+      if (successCount > 0) {
+        toast.success(
+          successCount === allFiles.length
+            ? `${successCount} documents uploaded`
+            : `${successCount} of ${allFiles.length} documents uploaded`
+        );
+        resetAll();
+        onOpenChange(false);
+        onUploadSuccess();
+      }
+    } else {
+      // Single-file path: upload then go to signers step
+      try {
+        const doc = await uploadSingleFile(file, signingMode);
+        setDocumentId(doc.id);
+        setDocumentTitle(doc.title);
+        setStep("signers");
+      } catch (error: any) {
+        toast.error(error.message || "An error occurred");
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
@@ -253,13 +311,15 @@ export function UploadDialog({
                     type="file"
                     className="hidden"
                     accept="application/pdf"
+                    multiple
                     onChange={handleFileInput}
                   />
                 </label>
-                <p className="mt-1 text-xs text-gray-500">PDF up to 10MB</p>
+                <p className="mt-1 text-xs text-gray-500">PDF up to 10MB · select multiple to bulk upload</p>
               </div>
             ) : (
               <>
+                {/* Primary file */}
                 <div className="border rounded-lg p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -269,13 +329,35 @@ export function UploadDialog({
                         <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
                       </div>
                     </div>
-                    <button onClick={() => setFile(null)} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={() => { setFile(null); setExtraFiles([]); }} className="text-gray-400 hover:text-gray-600">
                       <X className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                {/* Extra files (multi-file mode) */}
+                {extraFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {extraFiles.map((f, i) => (
+                      <div key={i} className="border rounded-lg px-3 py-2.5 flex items-center justify-between">
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <FileText className="h-5 w-5 text-red-400 flex-shrink-0" />
+                          <p className="text-sm truncate">{f.name}</p>
+                          <p className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(f.size)}</p>
+                        </div>
+                        <button onClick={() => removeExtraFile(i)} className="text-gray-400 hover:text-gray-600 ml-2">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                      Bulk upload: {1 + extraFiles.length} files will be uploaded as draft documents. Use "Bulk Sign" on the dashboard to sign them all at once.
+                    </p>
+                  </div>
+                )}
+
+                {/* Signing mode (single-file only) */}
+                {!isMultiMode && <div className="space-y-3">
                   <Label className="text-sm font-medium">Signing Mode</Label>
                   <div className="space-y-2">
                     <label
@@ -326,7 +408,7 @@ export function UploadDialog({
                       </div>
                     </label>
                   </div>
-                </div>
+                </div>}
               </>
             )}
 
@@ -335,12 +417,18 @@ export function UploadDialog({
                 Cancel
               </Button>
               <Button onClick={handleUpload} disabled={!file || uploading}>
-                {uploading ? "Uploading..." : (
-                  <>
-                    Continue
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </>
-                )}
+                {uploading && uploadProgress
+                  ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
+                  : uploading
+                  ? "Uploading…"
+                  : isMultiMode
+                  ? `Upload All (${1 + extraFiles.length})`
+                  : (
+                    <>
+                      Continue
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </>
+                  )}
               </Button>
             </div>
           </div>

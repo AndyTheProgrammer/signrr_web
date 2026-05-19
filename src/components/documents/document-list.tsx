@@ -16,9 +16,19 @@ import {
 
 interface DocumentListProps {
   refreshTrigger?: number;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onDocumentsLoaded?: (docs: Document[]) => void;
 }
 
-export function DocumentList({ refreshTrigger }: DocumentListProps) {
+export function DocumentList({
+  refreshTrigger,
+  selectable,
+  selectedIds,
+  onToggleSelect,
+  onDocumentsLoaded,
+}: DocumentListProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">("all");
@@ -39,6 +49,7 @@ export function DocumentList({ refreshTrigger }: DocumentListProps) {
 
       const data = await response.json();
       setDocuments(data.documents);
+      onDocumentsLoaded?.(data.documents);
     } catch (error: any) {
       toast.error(error.message || "An error occurred");
     } finally {
@@ -112,6 +123,9 @@ export function DocumentList({ refreshTrigger }: DocumentListProps) {
             key={document.id}
             document={document}
             onDelete={handleDocumentDelete}
+            selectable={selectable}
+            selected={selectedIds?.has(document.id)}
+            onToggleSelect={() => onToggleSelect?.(document.id)}
           />
         ))}
       </div>

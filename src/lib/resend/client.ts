@@ -6,10 +6,12 @@ export const sendEmail = async ({
   to,
   subject,
   html,
+  attachments,
 }: {
   to: string
   subject: string
   html: string
+  attachments?: Array<{ filename: string; content: Buffer }>
 }) => {
   try {
     const data = await resend.emails.send({
@@ -17,6 +19,7 @@ export const sendEmail = async ({
       to: [to],
       subject,
       html,
+      ...(attachments?.length ? { attachments } : {}),
     })
 
     return { success: true, data }

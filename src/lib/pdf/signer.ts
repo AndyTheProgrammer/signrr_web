@@ -136,3 +136,85 @@ export async function mergeSignaturesOntoPdf(
 
   return signedPath;
 }
+
+export interface BulkPlacementConfig {
+  mode: "all-pages" | "specific-pages";
+  position?: { x: number; y: number; width?: number };
+  placements?: { page: number; x: number; y: number; width?: number }[];
+}
+
+export async function bulkMergeSignatureOnPages(
+  originalFilePath: string,
+  signatureData: string,
+  config: BulkPlacementConfig
+): Promise<string> {
+  const supabase = createServiceClient();
+
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from("documents")
+    .download(originalFilePath);
+
+  if (downloadError || !fileData) {
+    throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+  }
+
+  const pdfBytes = await fileData.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const pages = pdfDoc.getPages();
+
+  const base64Data = signatureData.split(",")[1];
+  if (!base64Data) throw new Error("Invalid signature data");
+
+  const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+  const signatureImage = await pdfDoc.embedPng(imageBytes);
+
+  const drawOnPage = (
+    page: ReturnType<typeof pdfDoc.getPage>,
+    x: number,
+    y: number,
+    widthPct: number = 20
+  ) => {
+    const { width: pw, height: ph } = page.getSize();
+    const sigWidth = (widthPct / 100) * pw;
+    const sigHeight = (signatureImage.height / signatureImage.width) * sigWidth;
+    const drawX = (x / 100) * pw - sigWidth / 2;
+    const drawY = ph - (y / 100) * ph - sigHeight / 2;
+    page.drawImage(signatureImage, {
+      x: Math.max(0, Math.min(drawX, pw - sigWidth)),
+      y: Math.max(0, Math.min(drawY, ph - sigHeight)),
+      width: sigWidth,
+      height: sigHeight,
+    });
+  };
+
+  if (config.mode === "all-pages") {
+    if (!config.position) throw new Error("Position required for all-pages mode");
+    const { x, y, width } = config.position;
+    for (const page of pages) {
+      drawOnPage(page, x, y, width ?? 20);
+    }
+  } else {
+    for (const placement of config.placements ?? []) {
+      const pageIndex = placement.page - 1;
+      if (pageIndex >= 0 && pageIndex < pages.length) {
+        drawOnPage(pages[pageIndex], placement.x, placement.y, placement.width ?? 20);
+      }
+    }
+  }
+
+  const signedPdfBytes = await pdfDoc.save();
+  const signedPath = originalFilePath.replace(/\.pdf$/i, "_bulk_signed.pdf");
+
+  const { error: uploadError } = await supabase.storage
+    .from("documents")
+    .upload(signedPath, signedPdfBytes, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new Error(`Failed to upload signed PDF: ${uploadError.message}`);
+  }
+
+  return signedPath;
+}

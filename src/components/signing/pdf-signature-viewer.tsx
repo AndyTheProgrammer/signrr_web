@@ -535,6 +535,7 @@ export function PdfSignatureViewer({
                     />
                     {/* Delete button */}
                     <button
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         removeItem(item.id);
@@ -573,6 +574,7 @@ export function PdfSignatureViewer({
                     {item.content}
                     {/* Delete button */}
                     <button
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         removeItem(item.id);

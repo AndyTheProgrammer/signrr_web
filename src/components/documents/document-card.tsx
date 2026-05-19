@@ -12,9 +12,18 @@ import { toast } from "sonner";
 interface DocumentCardProps {
   document: Document;
   onDelete: () => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export function DocumentCard({ document, onDelete }: DocumentCardProps) {
+export function DocumentCard({
+  document,
+  onDelete,
+  selectable,
+  selected,
+  onToggleSelect,
+}: DocumentCardProps) {
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this document?")) {
       return;
@@ -71,13 +80,36 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
   const StatusIcon = statusConfig.icon;
 
   return (
-    <Card className="hover:border-gray-300 transition-colors group">
+    <Card
+      className={`transition-colors group ${
+        selectable
+          ? selected
+            ? "border-neutral-900 ring-2 ring-neutral-900 cursor-pointer"
+            : "hover:border-gray-400 cursor-pointer"
+          : "hover:border-gray-300"
+      }`}
+      onClick={selectable ? onToggleSelect : undefined}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-3 flex-1 min-w-0">
-            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-              <FileText className="h-5 w-5 text-red-500" />
-            </div>
+            {selectable ? (
+              <div
+                className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                  selected
+                    ? "bg-neutral-900 border-neutral-900"
+                    : "bg-gray-100 border-gray-300"
+                }`}
+              >
+                {selected && (
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                )}
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                <FileText className="h-5 w-5 text-red-500" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold truncate">{document.title}</h3>
               <p className="text-xs text-gray-400 mt-1">
@@ -103,22 +135,24 @@ export function DocumentCard({ document, onDelete }: DocumentCardProps) {
         )}
       </CardContent>
 
-      <CardFooter className="flex justify-between pt-3 border-t">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/dashboard/documents/${document.id}`}>
-            <Eye className="h-4 w-4 mr-1" />
-            View
-          </Link>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleDelete}
-          className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </CardFooter>
+      {!selectable && (
+        <CardFooter className="flex justify-between pt-3 border-t">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/documents/${document.id}`}>
+              <Eye className="h-4 w-4 mr-1" />
+              View
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDelete}
+            className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 }
