@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
+import { signedDocumentEmail } from "@/lib/resend/templates";
 
 const schema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -70,31 +71,11 @@ export async function POST(
 
     const pdfBuffer = Buffer.from(await fileData.arrayBuffer());
     const safeTitle = document.title.replace(/[^a-z0-9]/gi, "_");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     const result = await sendEmail({
       to: email,
       subject: `Signed document: "${document.title}"`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-          <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a1a;">
-            <div style="background:#f8f9fa;border-radius:12px;padding:32px;margin-bottom:16px;">
-              <h2 style="margin-top:0;font-size:20px;color:#111;">Signed Document</h2>
-              <p style="font-size:15px;color:#444;margin-bottom:8px;">
-                You've received a signed copy of
-                <strong style="color:#111;">"${document.title}"</strong>.
-              </p>
-              <p style="font-size:14px;color:#666;margin-bottom:0;">
-                The signed PDF is attached to this email.
-              </p>
-            </div>
-            <p style="text-align:center;font-size:12px;color:#999;margin:0;">
-              Sent via <a href="${appUrl}" style="color:#666;text-decoration:none;">SignrR</a>
-            </p>
-          </body>
-        </html>
-      `,
+      html: signedDocumentEmail(document.title),
       attachments: [
         {
           filename: `${safeTitle}_signed.pdf`,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/resend/client";
+import { createClient } from "@/lib/supabase/server";
+import { inngest } from "@/inngest/client";
 
 const sendItemSchema = z.object({
   documentId: z.string(),
@@ -9,7 +9,7 @@ const sendItemSchema = z.object({
 });
 
 const schema = z.object({
-  sends: z.array(sendItemSchema).min(1).max(50),
+  sends: z.array(sendItemSchema).min(1).max(500),
 });
 
 export async function POST(request: NextRequest) {
@@ -34,96 +34,40 @@ export async function POST(request: NextRequest) {
     }
 
     const { sends } = validation.data;
-    const serviceClient = createServiceClient();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    // Fetch all referenced documents in one query to verify ownership
+    // Verify ownership of all documents in a single query — fast and secure.
+    // We do this here (in the authenticated API route) so the Inngest function
+    // can trust the payload it receives without re-checking ownership.
     const { data: documents } = await supabase
       .from("documents")
-      .select("*")
+      .select("id, status, signed_file_path")
       .in("id", sends.map((s) => s.documentId))
       .eq("owner_id", user.id);
 
-    const docMap = new Map((documents ?? []).map((d) => [d.id, d]));
+    const ownedIds = new Set((documents ?? []).map((d) => d.id));
+    const unauthorised = sends.filter((s) => !ownedIds.has(s.documentId));
 
-    const results: Array<{
-      documentId: string;
-      email: string;
-      success: boolean;
-      error?: string;
-    }> = [];
-
-    for (const { documentId, email } of sends) {
-      const doc = docMap.get(documentId);
-
-      if (!doc) {
-        results.push({ documentId, email, success: false, error: "Document not found or access denied" });
-        continue;
-      }
-
-      if (doc.status !== "completed" || !doc.signed_file_path) {
-        results.push({ documentId, email, success: false, error: "Document has no signed PDF" });
-        continue;
-      }
-
-      try {
-        const { data: fileData, error: downloadError } = await serviceClient.storage
-          .from("documents")
-          .download(doc.signed_file_path);
-
-        if (downloadError || !fileData) {
-          throw new Error("Failed to retrieve signed PDF");
-        }
-
-        const pdfBuffer = Buffer.from(await fileData.arrayBuffer());
-        const safeTitle = doc.title.replace(/[^a-z0-9]/gi, "_");
-
-        await sendEmail({
-          to: email,
-          subject: `Signed document: "${doc.title}"`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-              <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a1a;">
-                <div style="background:#f8f9fa;border-radius:12px;padding:32px;margin-bottom:16px;">
-                  <h2 style="margin-top:0;font-size:20px;color:#111;">Signed Document</h2>
-                  <p style="font-size:15px;color:#444;margin-bottom:8px;">
-                    You've received a signed copy of
-                    <strong style="color:#111;">"${doc.title}"</strong>.
-                  </p>
-                  <p style="font-size:14px;color:#666;margin-bottom:0;">
-                    The signed PDF is attached to this email.
-                  </p>
-                </div>
-                <p style="text-align:center;font-size:12px;color:#999;margin:0;">
-                  Sent via <a href="${appUrl}" style="color:#666;text-decoration:none;">SignrR</a>
-                </p>
-              </body>
-            </html>
-          `,
-          attachments: [
-            {
-              filename: `${safeTitle}_signed.pdf`,
-              content: pdfBuffer,
-            },
-          ],
-        });
-
-        results.push({ documentId, email, success: true });
-      } catch (err: any) {
-        console.error(`Error sending document ${documentId}:`, err);
-        results.push({
-          documentId,
-          email,
-          success: false,
-          error: err.message ?? "Send failed",
-        });
-      }
+    if (unauthorised.length > 0) {
+      return NextResponse.json(
+        { error: "One or more documents were not found or do not belong to you" },
+        { status: 403 }
+      );
     }
 
-    return NextResponse.json({ results });
+    // Enqueue — Inngest picks this up immediately and runs it in the background.
+    // This call returns in milliseconds regardless of how many emails need sending.
+    await inngest.send({
+      name: "email/bulk.send",
+      data: { sends },
+    });
+
+    return NextResponse.json({
+      queued: true,
+      count: sends.length,
+      message: `${sends.length} email${sends.length !== 1 ? "s" : ""} queued for delivery`,
+    });
   } catch (error) {
-    console.error("Error in bulk-send route:", error);
+    console.error("Error queuing bulk email send:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
