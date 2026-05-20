@@ -2,7 +2,7 @@ import { inngest } from "../client";
 import { createServiceClient } from "@/lib/supabase/server";
 import { bulkMergeSignatureOnPages, BulkPlacementConfig } from "@/lib/pdf/signer";
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 5;
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
