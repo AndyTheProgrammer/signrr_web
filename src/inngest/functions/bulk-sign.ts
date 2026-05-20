@@ -15,7 +15,7 @@ export const bulkSign = inngest.createFunction(
     id: "bulk-sign",
     triggers: [{ event: "document/bulk.sign" as const }],
     retries: 2,
-    concurrency: { limit: 10 },
+    concurrency: { limit: 5 },
   },
   async ({ event, step }: { event: { data: any }; step: any }) => {
     const {
