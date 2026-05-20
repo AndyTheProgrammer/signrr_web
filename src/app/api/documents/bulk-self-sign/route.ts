@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { bulkMergeSignatureOnPages } from "@/lib/pdf/signer";
+import { createClient } from "@/lib/supabase/server";
+import { inngest } from "@/inngest/client";
 
 const positionSchema = z.object({
   x: z.number().min(0).max(100),
@@ -17,7 +17,7 @@ const placementSchema = z.object({
 });
 
 const schema = z.object({
-  documentIds: z.array(z.string()).min(1).max(50),
+  documentIds: z.array(z.string()).min(1).max(500),
   signature_data: z.string().min(1),
   placement_mode: z.enum(["all-pages", "specific-pages"]),
   position: positionSchema.optional(),
@@ -61,78 +61,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: documents, error: docsError } = await supabase
-      .from("documents")
-      .select("*")
-      .in("id", documentIds)
-      .eq("owner_id", user.id);
+    // Create a job record — Inngest will update it to 'completed' when done
+    const { data: job, error: jobError } = await supabase
+      .from("bulk_sign_jobs")
+      .insert({ owner_id: user.id, total: documentIds.length })
+      .select("id")
+      .single();
 
-    if (docsError) {
-      return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 });
+    if (jobError || !job) {
+      console.error("Failed to create bulk sign job:", jobError);
+      return NextResponse.json({ error: "Failed to create signing job" }, { status: 500 });
     }
 
-    const serviceClient = createServiceClient();
-    const results: Array<{
-      documentId: string;
-      title: string;
-      success: boolean;
-      error?: string;
-    }> = [];
+    await inngest.send({
+      name: "document/bulk.sign",
+      data: {
+        jobId: job.id,
+        documentIds,
+        signature_data,
+        placement_mode,
+        position,
+        placements,
+        ownerId: user.id,
+      },
+    });
 
-    for (const docId of documentIds) {
-      const document = (documents ?? []).find((d) => d.id === docId);
-
-      if (!document) {
-        results.push({
-          documentId: docId,
-          title: "Unknown",
-          success: false,
-          error: "Document not found or access denied",
-        });
-        continue;
-      }
-
-      if (document.status !== "draft") {
-        results.push({
-          documentId: docId,
-          title: document.title,
-          success: false,
-          error: `Skipped — document is ${document.status} (only drafts can be signed)`,
-        });
-        continue;
-      }
-
-      try {
-        const signedFilePath = await bulkMergeSignatureOnPages(
-          document.file_path,
-          signature_data,
-          { mode: placement_mode, position, placements }
-        );
-
-        await serviceClient
-          .from("documents")
-          .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
-            signed_file_path: signedFilePath,
-          })
-          .eq("id", docId);
-
-        results.push({ documentId: docId, title: document.title, success: true });
-      } catch (err: any) {
-        console.error(`Error signing document ${docId}:`, err);
-        results.push({
-          documentId: docId,
-          title: document.title,
-          success: false,
-          error: err.message ?? "Failed to sign document",
-        });
-      }
-    }
-
-    return NextResponse.json({ results });
+    return NextResponse.json({ jobId: job.id, total: documentIds.length });
   } catch (error) {
-    console.error("Error in bulk-self-sign route:", error);
+    console.error("Error queuing bulk sign job:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

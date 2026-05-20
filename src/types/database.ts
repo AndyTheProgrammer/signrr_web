@@ -67,6 +67,44 @@ export interface Database {
           completed_at?: string | null
         }
       }
+      bulk_sign_jobs: {
+        Row: {
+          id: string
+          owner_id: string
+          status: 'processing' | 'completed'
+          total: number
+          results: Array<{
+            documentId: string
+            title: string
+            success: boolean
+            error?: string
+          }>
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          status?: 'processing' | 'completed'
+          total?: number
+          results?: Array<{
+            documentId: string
+            title: string
+            success: boolean
+            error?: string
+          }>
+          created_at?: string
+        }
+        Update: {
+          status?: 'processing' | 'completed'
+          total?: number
+          results?: Array<{
+            documentId: string
+            title: string
+            success: boolean
+            error?: string
+          }>
+        }
+      }
       signers: {
         Row: {
           id: string

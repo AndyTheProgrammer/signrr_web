@@ -236,6 +236,10 @@ function BulkSignContent() {
   const RESULTS_PER_PAGE = 10;
   const [resultsPage, setResultsPage] = useState(1);
 
+  // ── Background job tracking ───────────────────────────────────────────────
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobTotal, setJobTotal] = useState(0);
+
   // ── Download / preview state ─────────────────────────────────────────────
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -419,16 +423,41 @@ function BulkSignContent() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to sign documents");
+      if (!res.ok) throw new Error(data.error || "Failed to queue signing job");
 
-      setResults(data.results);
-      setResultsPage(1);
-      setStep("done");
+      // Step stays as "processing" — the polling effect transitions to "done"
+      setJobId(data.jobId);
+      setJobTotal(data.total);
     } catch (err: any) {
       toast.error(err.message);
       setStep("configure");
     }
   };
+
+  // ── Poll for job completion ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!jobId || step !== "processing") return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/documents/bulk-sign-jobs/${jobId}`);
+        if (!res.ok) return; // transient error — keep polling
+        const data = await res.json();
+        if (data.status === "completed") {
+          setResults(data.results);
+          setResultsPage(1);
+          setJobId(null);
+          setStep("done");
+        }
+      } catch {
+        // network hiccup — keep polling
+      }
+    };
+
+    poll(); // check immediately on mount
+    const interval = setInterval(poll, 2500);
+    return () => clearInterval(interval);
+  }, [jobId, step]);
 
   // ── Download helpers ─────────────────────────────────────────────────────
   const handleDownloadOne = async (r: SignResult) => {
@@ -859,8 +888,8 @@ function BulkSignContent() {
           <div className="text-center">
             <p className="text-lg font-semibold">Signing documents…</p>
             <p className="text-sm text-gray-500 mt-1">
-              Applying your signature to {selectedDocs.length} document
-              {selectedDocs.length !== 1 ? "s" : ""}. Please wait.
+              {jobTotal} document{jobTotal !== 1 ? "s" : ""} are being signed in the background.
+              This page will update automatically when done.
             </p>
           </div>
         </div>
