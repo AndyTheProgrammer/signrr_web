@@ -277,6 +277,36 @@ function BulkSignContent() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Skip select step after upload — go straight to configure ─────────────
+  const jumpToConfigure = useCallback(async (ids: string[]) => {
+    setStep("loading");
+    try {
+      const res = await fetch("/api/documents?status=draft");
+      if (!res.ok) throw new Error("Failed to fetch documents");
+      const data = await res.json();
+      const docs: DocumentType[] = data.documents ?? [];
+
+      // Populate docGroups so the Back button on configure works correctly
+      setDocGroups(groupDocuments(docs, loadBatches()));
+      const uploadedSet = new Set(ids);
+      setSelectedIds(uploadedSet);
+
+      const toSign = docs.filter((d) => uploadedSet.has(d.id));
+      if (!toSign.length) throw new Error("Uploaded documents not found — please try again");
+
+      setSelectedDocs(toSign);
+      const pdfRes = await fetch(`/api/documents/${toSign[0].id}/pdf-url`);
+      if (!pdfRes.ok) throw new Error("Failed to load reference PDF");
+      const pdfData = await pdfRes.json();
+      setReferencePdfUrl(pdfData.url);
+      setStep("configure");
+    } catch (err: any) {
+      toast.error(err.message);
+      // Fall back to select step with the uploaded docs pre-selected
+      await loadDraftDocs(ids);
+    }
+  }, [loadDraftDocs]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Entry upload helpers ──────────────────────────────────────────────────
   const validateAndSetFiles = (files: File[]) => {
     const valid: File[] = [];
@@ -325,7 +355,7 @@ function BulkSignContent() {
     if (uploadedIds.length > 0) {
       saveBatch(uploadedIds);
       setEntryFiles([]);
-      await loadDraftDocs(uploadedIds);
+      await jumpToConfigure(uploadedIds);
     }
   };
 
@@ -579,8 +609,8 @@ function BulkSignContent() {
                 </button>
               </div>
 
-              <div className="divide-y max-h-56 overflow-y-auto">
-                {entryFiles.map((f, i) => (
+              <div className="divide-y">
+                {entryFiles.slice(0, 5).map((f, i) => (
                   <div key={i} className="flex items-center justify-between px-5 py-3">
                     <div className="flex items-center space-x-3 min-w-0">
                       <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
@@ -601,6 +631,11 @@ function BulkSignContent() {
                     </div>
                   </div>
                 ))}
+                {entryFiles.length > 5 && (
+                  <div className="px-5 py-2.5 text-xs text-gray-400">
+                    and {entryFiles.length - 5} more file{entryFiles.length - 5 !== 1 ? "s" : ""}…
+                  </div>
+                )}
               </div>
 
               <div className="px-5 py-4 border-t bg-gray-50">
