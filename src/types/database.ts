@@ -73,6 +73,7 @@ export interface Database {
           owner_id: string
           status: 'processing' | 'completed'
           total: number
+          processed: number
           results: Array<{
             documentId: string
             title: string
@@ -86,6 +87,7 @@ export interface Database {
           owner_id: string
           status?: 'processing' | 'completed'
           total?: number
+          processed?: number
           results?: Array<{
             documentId: string
             title: string
@@ -97,6 +99,7 @@ export interface Database {
         Update: {
           status?: 'processing' | 'completed'
           total?: number
+          processed?: number
           results?: Array<{
             documentId: string
             title: string

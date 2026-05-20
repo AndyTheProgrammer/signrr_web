@@ -2,6 +2,14 @@ import { inngest } from "../client";
 import { createServiceClient } from "@/lib/supabase/server";
 import { bulkMergeSignatureOnPages, BulkPlacementConfig } from "@/lib/pdf/signer";
 
+const BATCH_SIZE = 10;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 export const bulkSign = inngest.createFunction(
   {
     id: "bulk-sign",
@@ -29,75 +37,87 @@ export const bulkSign = inngest.createFunction(
     };
 
     const serviceClient = createServiceClient();
+    const config: BulkPlacementConfig = { mode: placement_mode, position, placements };
+    const batches = chunk(documentIds, BATCH_SIZE);
+    const allResults: Array<{ documentId: string; title: string; success: boolean; error?: string }> = [];
 
-    const config: BulkPlacementConfig = {
-      mode: placement_mode,
-      position,
-      placements,
-    };
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
 
-    // Each document is a named step — Inngest checkpoints after every step,
-    // so a crash mid-batch resumes from the last completed step.
-    const results = await Promise.all(
-      documentIds.map((docId: string) =>
-        step.run(`sign-${docId}`, async () => {
-          const { data: document } = await serviceClient
-            .from("documents")
-            .select("id, title, file_path, status")
-            .eq("id", docId)
-            .eq("owner_id", ownerId)
-            .single();
-
-          if (!document) {
-            return { documentId: docId, title: "Unknown", success: false, error: "Document not found" };
-          }
-
-          if (document.status !== "draft") {
-            return {
-              documentId: docId,
-              title: document.title,
-              success: false,
-              error: `Skipped — document is ${document.status}`,
-            };
-          }
-
-          try {
-            const signedFilePath = await bulkMergeSignatureOnPages(
-              document.file_path,
-              signature_data,
-              config
-            );
-
-            await serviceClient
+      // Sign all docs in this batch concurrently — each is a named step so
+      // Inngest checkpoints after every step and can resume on crash.
+      const batchResults = await Promise.all(
+        batch.map((docId: string) =>
+          step.run(`sign-${docId}`, async () => {
+            const { data: document } = await serviceClient
               .from("documents")
-              .update({
-                status: "completed",
-                completed_at: new Date().toISOString(),
-                signed_file_path: signedFilePath,
-              })
-              .eq("id", docId);
+              .select("id, title, file_path, status")
+              .eq("id", docId)
+              .eq("owner_id", ownerId)
+              .single();
 
-            return { documentId: docId, title: document.title, success: true };
-          } catch (err: any) {
-            return {
-              documentId: docId,
-              title: document.title,
-              success: false,
-              error: err.message ?? "Failed to sign document",
-            };
-          }
-        })
-      )
-    );
+            if (!document) {
+              return { documentId: docId, title: "Unknown", success: false, error: "Document not found" };
+            }
 
-    // Mark the job as completed and store the full results
+            if (document.status !== "draft") {
+              return {
+                documentId: docId,
+                title: document.title,
+                success: false,
+                error: `Skipped — document is ${document.status}`,
+              };
+            }
+
+            try {
+              const signedFilePath = await bulkMergeSignatureOnPages(
+                document.file_path,
+                signature_data,
+                config
+              );
+
+              await serviceClient
+                .from("documents")
+                .update({
+                  status: "completed",
+                  completed_at: new Date().toISOString(),
+                  signed_file_path: signedFilePath,
+                })
+                .eq("id", docId);
+
+              return { documentId: docId, title: document.title, success: true };
+            } catch (err: any) {
+              return {
+                documentId: docId,
+                title: document.title,
+                success: false,
+                error: err.message ?? "Failed to sign document",
+              };
+            }
+          })
+        )
+      );
+
+      allResults.push(...batchResults);
+
+      // Update progress after each batch — sequential so no race conditions.
+      // On Inngest replay this step is memoized and won't double-write.
+      await step.run(`progress-batch-${batchIndex}`, async () => {
+        await serviceClient
+          .from("bulk_sign_jobs")
+          .update({ processed: allResults.length })
+          .eq("id", jobId);
+      });
+    }
+
+    // All batches done — store results and mark complete
     await step.run("complete-job", async () => {
       await serviceClient
         .from("bulk_sign_jobs")
-        .update({ status: "completed", results })
+        .update({ status: "completed", processed: allResults.length, results: allResults })
         .eq("id", jobId);
     });
 
-    return { jobId, signed: results.filter((r: any) => r.success).length };
+    return { jobId, signed: allResults.filter((r) => r.success).length };
   }
 );

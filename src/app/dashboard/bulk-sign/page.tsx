@@ -239,6 +239,7 @@ function BulkSignContent() {
   // ── Background job tracking ───────────────────────────────────────────────
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobTotal, setJobTotal] = useState(0);
+  const [jobProcessed, setJobProcessed] = useState(0);
 
   // ── Download / preview state ─────────────────────────────────────────────
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -443,6 +444,7 @@ function BulkSignContent() {
         const res = await fetch(`/api/documents/bulk-sign-jobs/${jobId}`);
         if (!res.ok) return; // transient error — keep polling
         const data = await res.json();
+        setJobProcessed(data.processed ?? 0);
         if (data.status === "completed") {
           setResults(data.results);
           setResultsPage(1);
@@ -883,13 +885,25 @@ function BulkSignContent() {
 
       {/* ── Processing ── */}
       {step === "processing" && (
-        <div className="flex flex-col items-center justify-center py-32 space-y-5">
-          <Loader2 className="h-14 w-14 animate-spin text-neutral-700" />
-          <div className="text-center">
+        <div className="flex flex-col items-center justify-center py-32 space-y-6 max-w-sm mx-auto">
+          <Loader2 className="h-12 w-12 animate-spin text-neutral-700" />
+          <div className="w-full text-center space-y-3">
             <p className="text-lg font-semibold">Signing documents…</p>
-            <p className="text-sm text-gray-500 mt-1">
-              {jobTotal} document{jobTotal !== 1 ? "s" : ""} are being signed in the background.
-              This page will update automatically when done.
+            <p className="text-sm text-gray-500">
+              {jobProcessed} of {jobTotal} signed
+            </p>
+            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-2 bg-neutral-900 rounded-full transition-all duration-500"
+                style={{
+                  width: jobTotal > 0 ? `${Math.round((jobProcessed / jobTotal) * 100)}%` : "0%",
+                }}
+              />
+            </div>
+            <p className="text-xs text-gray-400">
+              {jobTotal > 0
+                ? `${Math.round((jobProcessed / jobTotal) * 100)}% complete`
+                : "Starting…"}
             </p>
           </div>
         </div>

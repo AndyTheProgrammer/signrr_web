@@ -20,7 +20,7 @@ export async function GET(
 
     const { data: job, error } = await supabase
       .from("bulk_sign_jobs")
-      .select("id, status, total, results")
+      .select("id, status, total, processed, results")
       .eq("id", jobId)
       .eq("owner_id", user.id)
       .single();
