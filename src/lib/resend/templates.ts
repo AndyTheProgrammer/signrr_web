@@ -1,22 +1,11 @@
-import fs from "fs";
-import path from "path";
-
-// ── Embed logos as base64 so they display in every email client,
-//    regardless of whether the app URL is publicly reachable. ──────────────
-function loadLogo(filename: string): string {
-  try {
-    const filePath = path.join(process.cwd(), "public", filename);
-    const buffer = fs.readFileSync(filePath);
-    return `data:image/png;base64,${buffer.toString("base64")}`;
-  } catch {
-    return "";
-  }
-}
-
-const SIGNRR_LOGO = loadLogo("signrR_Logo_3-1.png");
-const BYTEHUB_LOGO = loadLogo("bytehub-logo.png");
-const YEAR = new Date().getFullYear();
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+// Publicly hosted — works in every email client. In development these won't
+// render (localhost isn't reachable by email clients) but in production they
+// resolve correctly as long as NEXT_PUBLIC_APP_URL is set to your domain.
+const SIGNRR_LOGO = `${APP_URL}/signrR_Logo_3-1.png`;
+const BYTEHUB_LOGO = `${APP_URL}/bytehub-logo.png`;
+const YEAR = new Date().getFullYear();
 
 /**
  * Branded plain-paper email for sending a signed document to a recipient.
@@ -50,10 +39,8 @@ export function signedDocumentEmail(documentTitle: string): string {
             <td align="center"
                 style="background-color:#ffffff;padding:32px 40px 28px;
                        border-bottom:1px solid #f3f4f6;">
-              ${SIGNRR_LOGO
-                ? `<img src="${SIGNRR_LOGO}" alt="SignrR" width="150" height="150"
-                        style="display:block;width:150px;height:150px;object-fit:contain;" />`
-                : `<span style="font-size:22px;font-weight:700;color:#111827;">SignrR</span>`}
+              <img src="${SIGNRR_LOGO}" alt="SignrR" width="150" height="150"
+                   style="display:block;width:150px;height:150px;object-fit:contain;" />
             </td>
           </tr>
 
@@ -111,10 +98,8 @@ export function signedDocumentEmail(documentTitle: string): string {
                      style="margin:0 auto 8px;">
                 <tr>
                   <td style="vertical-align:middle;padding-right:7px;">
-                    ${BYTEHUB_LOGO
-                      ? `<img src="${BYTEHUB_LOGO}" alt="Bytehub" width="18" height="20"
-                              style="display:block;width:18px;height:20px;object-fit:contain;" />`
-                      : ""}
+                    <img src="${BYTEHUB_LOGO}" alt="Bytehub" width="18" height="20"
+                         style="display:block;width:18px;height:20px;object-fit:contain;" />
                   </td>
                   <td style="vertical-align:middle;">
                     <span style="font-size:11px;color:#9ca3af;letter-spacing:0.3px;">
