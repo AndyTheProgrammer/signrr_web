@@ -20,6 +20,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   FileText,
   Filter,
   Eye,
@@ -58,6 +66,32 @@ function getStatusConfig(status: DocumentStatus) {
   }
 }
 
+function Checkbox({ checked, indeterminate, onClick }: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors cursor-pointer flex-shrink-0 ${
+        checked || indeterminate
+          ? "bg-neutral-900 border-neutral-900"
+          : "border-neutral-300 hover:border-neutral-500"
+      }`}
+    >
+      {checked && (
+        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+      {indeterminate && !checked && (
+        <div className="w-2 h-0.5 bg-white rounded" />
+      )}
+    </div>
+  );
+}
+
 export function DocumentList({
   refreshTrigger,
   selectable,
@@ -70,6 +104,11 @@ export function DocumentList({
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(25);
+
+  // Internal selection for deletion (separate from external selectable prop)
+  const [deleteSelection, setDeleteSelection] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   const fetchDocuments = async () => {
     setLoading(true);
@@ -99,6 +138,56 @@ export function DocumentList({
   useEffect(() => {
     fetchDocuments();
   }, [statusFilter, refreshTrigger]);
+
+  // Clear selection when filter or data changes
+  useEffect(() => {
+    setDeleteSelection(new Set());
+  }, [statusFilter, refreshTrigger]);
+
+  const toggleDeleteSelect = (id: string) => {
+    setDeleteSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = documents.length > 0 && documents.every((d) => deleteSelection.has(d.id));
+  const someSelected = deleteSelection.size > 0 && !allSelected;
+
+  const toggleSelectAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (allSelected) {
+      setDeleteSelection(new Set());
+    } else {
+      setDeleteSelection(new Set(documents.map((d) => d.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    setDeletingSelected(true);
+    try {
+      const response = await fetch("/api/documents/bulk-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(deleteSelection) }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete documents");
+      }
+      const { deleted } = await response.json();
+      toast.success(`${deleted} document${deleted !== 1 ? "s" : ""} deleted`);
+      setDeleteSelection(new Set());
+      setConfirmDelete(false);
+      fetchDocuments();
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    } finally {
+      setDeletingSelected(false);
+    }
+  };
 
   const handleDelete = async (doc: Document) => {
     if (!confirm("Are you sure you want to delete this document?")) return;
@@ -156,18 +245,68 @@ export function DocumentList({
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b bg-neutral-50/50">
         <span className="text-sm text-gray-500">
-          {documents.length} document{documents.length !== 1 ? "s" : ""}
-          {statusFilter !== "all" && (
-            <span className="ml-1 text-gray-400">· {statusFilter}</span>
+          {deleteSelection.size > 0 ? (
+            <span className="font-medium text-neutral-800">
+              {deleteSelection.size} selected
+            </span>
+          ) : (
+            <>
+              {documents.length} document{documents.length !== 1 ? "s" : ""}
+              {statusFilter !== "all" && (
+                <span className="ml-1 text-gray-400">· {statusFilter}</span>
+              )}
+            </>
           )}
         </span>
-        <FilterMenu value={statusFilter} onChange={(v) => setStatusFilter(v)} />
+        <div className="flex items-center gap-2">
+          {deleteSelection.size > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-red-400 border-red-100 hover:bg-red-50 hover:text-red-500 hover:border-red-200"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete {deleteSelection.size} selected
+            </Button>
+          )}
+          <FilterMenu value={statusFilter} onChange={(v) => setStatusFilter(v)} />
+        </div>
       </div>
+
+      {/* Delete selected confirmation dialog */}
+      <Dialog open={confirmDelete} onOpenChange={(open) => { if (!open) setConfirmDelete(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleteSelection.size} document{deleteSelection.size !== 1 ? "s" : ""}?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the selected document{deleteSelection.size !== 1 ? "s" : ""}. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deletingSelected}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={handleDeleteSelected} disabled={deletingSelected} className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600 hover:border-red-300">
+              {deletingSelected ? "Deleting…" : `Delete ${deleteSelection.size} document${deleteSelection.size !== 1 ? "s" : ""}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Table */}
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
+            {!selectable && (
+              <TableHead className="w-10 py-2 pl-4">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onClick={toggleSelectAll}
+                />
+              </TableHead>
+            )}
             {selectable && <TableHead className="w-10 py-2" />}
             <TableHead className="py-2">Document</TableHead>
             <TableHead className="w-32 py-2">Status</TableHead>
@@ -178,23 +317,33 @@ export function DocumentList({
         <TableBody>
           {pageDocuments.map((doc) => {
             const { label, icon: StatusIcon, className: badgeClass } = getStatusConfig(doc.status);
-            const isSelected = selectedIds?.has(doc.id);
+            const isExternalSelected = selectedIds?.has(doc.id);
+            const isDeleteSelected = deleteSelection.has(doc.id);
 
             return (
               <TableRow
                 key={doc.id}
-                data-state={isSelected ? "selected" : undefined}
+                data-state={isExternalSelected || isDeleteSelected ? "selected" : undefined}
                 className={selectable ? "cursor-pointer" : undefined}
                 onClick={selectable ? () => onToggleSelect?.(doc.id) : undefined}
               >
+                {!selectable && (
+                  <TableCell className="py-1.5 pl-4 pr-0">
+                    <Checkbox
+                      checked={isDeleteSelected}
+                      onClick={(e) => { e.stopPropagation(); toggleDeleteSelect(doc.id); }}
+                    />
+                  </TableCell>
+                )}
+
                 {selectable && (
                   <TableCell className="py-1.5 pr-0">
                     <div
                       className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                        isSelected ? "bg-neutral-900 border-neutral-900" : "border-neutral-300"
+                        isExternalSelected ? "bg-neutral-900 border-neutral-900" : "border-neutral-300"
                       }`}
                     >
-                      {isSelected && (
+                      {isExternalSelected && (
                         <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
@@ -236,7 +385,7 @@ export function DocumentList({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
+                        className="h-7 w-7 p-0 text-red-300 hover:text-red-500 hover:bg-red-50"
                         onClick={(e) => { e.stopPropagation(); handleDelete(doc); }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
