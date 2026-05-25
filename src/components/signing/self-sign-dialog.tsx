@@ -36,6 +36,8 @@ interface SelfSignDialogProps {
   signingMode: "simple" | "positioned";
   signerName: string;
   onSuccess: () => void;
+  /** When true, calls /sign-as-owner instead of /self-sign (for sequential owner slots) */
+  sequential?: boolean;
 }
 
 export function SelfSignDialog({
@@ -46,6 +48,7 @@ export function SelfSignDialog({
   signingMode,
   signerName,
   onSuccess,
+  sequential = false,
 }: SelfSignDialogProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
@@ -78,7 +81,10 @@ export function SelfSignDialog({
   ) => {
     setSubmitting(true);
     try {
-      const response = await fetch(`/api/documents/${documentId}/self-sign`, {
+      const endpoint = sequential
+        ? `/api/documents/${documentId}/sign-as-owner`
+        : `/api/documents/${documentId}/self-sign`;
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,7 +117,9 @@ export function SelfSignDialog({
         <DialogHeader>
           <DialogTitle>Sign Document</DialogTitle>
           <DialogDescription>
-            Signing <span className="font-medium text-gray-900">&ldquo;{documentTitle}&rdquo;</span> as yourself
+            {sequential
+              ? <>It&apos;s your turn to sign <span className="font-medium text-gray-900">&ldquo;{documentTitle}&rdquo;</span> in the signing sequence.</>
+              : <>Signing <span className="font-medium text-gray-900">&ldquo;{documentTitle}&rdquo;</span> as yourself</>}
           </DialogDescription>
         </DialogHeader>
 

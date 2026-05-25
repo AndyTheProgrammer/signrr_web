@@ -42,8 +42,10 @@ export default function DocumentDetailPage() {
   const [document, setDocument] = useState<DocumentWithSigners | null>(null);
   const [loading, setLoading] = useState(true);
   const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
   const [addSignersDialogOpen, setAddSignersDialogOpen] = useState(false);
   const [selfSignDialogOpen, setSelfSignDialogOpen] = useState(false);
+  const [sequentialSignDialogOpen, setSequentialSignDialogOpen] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
@@ -60,6 +62,7 @@ export default function DocumentDetailPage() {
             data.user.email ||
             "You"
           );
+          setOwnerEmail(data.user.email ?? "");
         }
       });
   }, []);
@@ -240,6 +243,18 @@ export default function DocumentDetailPage() {
   const statusConfig = getStatusConfig(document.status);
   const StatusIcon = statusConfig.icon;
 
+  // Detect when it is the owner's turn in the sequential signing flow
+  const ownerIsCurrentSigner =
+    document.status === "pending" &&
+    document.signers &&
+    document.signers.length > 0 &&
+    (() => {
+      const current = document.signers.find(
+        (s) => s.signing_order === document.current_signer_index + 1
+      );
+      return current?.is_self === true && current?.status === "pending";
+    })();
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -308,6 +323,12 @@ export default function DocumentDetailPage() {
             Sign Yourself
           </Button>
         )}
+        {ownerIsCurrentSigner && (
+          <Button onClick={() => setSequentialSignDialogOpen(true)}>
+            <PenLine className="h-4 w-4 mr-2" />
+            Sign Now (Your Turn)
+          </Button>
+        )}
         {document.status === "pending" && (
           <Button
             variant="outline"
@@ -320,6 +341,22 @@ export default function DocumentDetailPage() {
           </Button>
         )}
       </div>
+
+      {/* Your-turn-to-sign banner */}
+      {ownerIsCurrentSigner && (
+        <div className="mb-4 flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
+          <PenLine className="h-5 w-5 text-blue-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-blue-900">It&apos;s your turn to sign</p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              The previous signer has completed their step. Sign now to keep the workflow moving.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setSequentialSignDialogOpen(true)}>
+            Sign Now
+          </Button>
+        </div>
+      )}
 
       {/* Send by Email inline panel */}
       {sendEmailOpen && document.status === "completed" && (
@@ -448,7 +485,14 @@ export default function DocumentDetailPage() {
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium">{signer.full_name || "No name"}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{signer.full_name || "No name"}</p>
+                          {signer.is_self && (
+                            <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700 border-blue-200 py-0">
+                              You
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex items-center space-x-2 mt-1">
                           <Mail className="h-3 w-3 text-gray-400" />
                           <p className="text-sm text-gray-600">{signer.email}</p>
@@ -504,10 +548,12 @@ export default function DocumentDetailPage() {
         open={addSignersDialogOpen}
         onOpenChange={setAddSignersDialogOpen}
         documentId={documentId}
+        ownerEmail={ownerEmail}
+        ownerName={ownerName}
         onSuccess={fetchDocument}
       />
 
-      {/* Self-sign Dialog */}
+      {/* Self-sign Dialog (draft documents) */}
       {document && (
         <SelfSignDialog
           open={selfSignDialogOpen}
@@ -517,6 +563,20 @@ export default function DocumentDetailPage() {
           signingMode={document.signing_mode}
           signerName={ownerName}
           onSuccess={fetchDocument}
+        />
+      )}
+
+      {/* Sequential sign Dialog (owner's turn in pending workflow) */}
+      {document && (
+        <SelfSignDialog
+          open={sequentialSignDialogOpen}
+          onOpenChange={setSequentialSignDialogOpen}
+          documentId={documentId}
+          documentTitle={document.title}
+          signingMode={document.signing_mode}
+          signerName={ownerName}
+          onSuccess={fetchDocument}
+          sequential
         />
       )}
     </div>

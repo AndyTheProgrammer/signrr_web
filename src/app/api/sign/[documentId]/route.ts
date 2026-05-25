@@ -120,34 +120,39 @@ export async function POST(
         .eq("id", documentId);
 
       const nextSigner = allSigners[nextSignerIndex];
-      const signingUrl = `${appUrl}/sign/${nextSigner.magic_token}`;
 
-      try {
-        await sendEmail({
-          to: nextSigner.email,
-          subject: `Your turn to sign "${document.title}"`,
-          html: `
-            <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-              <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
-                <h2 style="margin-top:0;">It's Your Turn to Sign</h2>
-                <p>Hello ${nextSigner.full_name},</p>
-                <p>The previous signer has completed their signature. Please sign <strong>"${document.title}"</strong> now.</p>
-                <div style="text-align:center;margin:30px 0;">
-                  <a href="${signingUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
-                    Sign Document Now
-                  </a>
+      // Only email external signers — the owner sees a dashboard prompt
+      if (!nextSigner.is_self) {
+        const signingUrl = `${appUrl}/sign/${nextSigner.magic_token}`;
+        try {
+          await sendEmail({
+            to: nextSigner.email,
+            subject: `Your turn to sign "${document.title}"`,
+            html: `
+              <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
+                  <h2 style="margin-top:0;">It's Your Turn to Sign</h2>
+                  <p>Hello ${nextSigner.full_name},</p>
+                  <p>The previous signer has completed their signature. Please sign <strong>"${document.title}"</strong> now.</p>
+                  <div style="text-align:center;margin:30px 0;">
+                    <a href="${signingUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
+                      Sign Document Now
+                    </a>
+                  </div>
+                  <p style="font-size:13px;color:#666;">This link expires in 48 hours.</p>
                 </div>
-                <p style="font-size:13px;color:#666;">This link expires in 48 hours.</p>
-              </div>
-            </body>`,
-        });
-      } catch (emailError) {
-        console.error("Error sending email to next signer:", emailError);
+              </body>`,
+          });
+        } catch (emailError) {
+          console.error("Error sending email to next signer:", emailError);
+        }
       }
 
       return NextResponse.json({
         message: "Signature saved successfully",
-        nextSigner: { order: nextSigner.signing_order, name: nextSigner.full_name },
+        nextSigner: nextSigner.is_self
+          ? { order: nextSigner.signing_order, name: nextSigner.full_name, isSelf: true }
+          : { order: nextSigner.signing_order, name: nextSigner.full_name },
       });
     } else {
       // ── All signers done — merge PDF ──

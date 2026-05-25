@@ -116,6 +116,7 @@ export interface Database {
           full_name: string | null
           signing_order: number
           status: 'pending' | 'signed'
+          is_self: boolean | null
           magic_token: string | null
           magic_token_expires_at: string | null
           signed_at: string | null
@@ -130,6 +131,7 @@ export interface Database {
           full_name?: string | null
           signing_order: number
           status?: 'pending' | 'signed'
+          is_self?: boolean | null
           magic_token?: string | null
           magic_token_expires_at?: string | null
           signed_at?: string | null
@@ -144,6 +146,7 @@ export interface Database {
           full_name?: string | null
           signing_order?: number
           status?: 'pending' | 'signed'
+          is_self?: boolean | null
           magic_token?: string | null
           magic_token_expires_at?: string | null
           signed_at?: string | null

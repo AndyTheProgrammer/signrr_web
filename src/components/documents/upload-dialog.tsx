@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Upload,
@@ -18,23 +17,21 @@ import {
   X,
   MousePointerClick,
   PenTool,
-  UserPlus,
-  Mail,
-  User,
   ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SigningMode } from "@/types/database";
+import { createClient } from "@/lib/supabase/client";
+import {
+  SignersListEditor,
+  validateSigners,
+  type LocalSigner,
+} from "@/components/signing/signers-list-editor";
 
 interface UploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUploadSuccess: () => void;
-}
-
-interface Signer {
-  email: string;
-  full_name: string;
 }
 
 type Step = "upload" | "signers";
@@ -47,7 +44,7 @@ export function UploadDialog({
   const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
-  const [extraFiles, setExtraFiles] = useState<File[]>([]); // additional files for multi-upload
+  const [extraFiles, setExtraFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -55,11 +52,27 @@ export function UploadDialog({
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [documentTitle, setDocumentTitle] = useState<string>("");
 
-  // Signers state
-  const [signers, setSigners] = useState<Signer[]>([{ email: "", full_name: "" }]);
+  // Owner info — fetched from auth when dialog opens
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+
+  // Shared signers state
+  const [signers, setSigners] = useState<LocalSigner[]>([{ email: "", full_name: "", is_self: false }]);
   const [submittingSigners, setSubmittingSigners] = useState(false);
 
   const isMultiMode = extraFiles.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (data.user) {
+          setOwnerEmail(data.user.email ?? "");
+          setOwnerName(data.user.user_metadata?.full_name || data.user.email || "You");
+        }
+      });
+  }, [open]);
 
   const resetAll = () => {
     setStep("upload");
@@ -71,7 +84,7 @@ export function UploadDialog({
     setSigningMode("simple");
     setDocumentId(null);
     setDocumentTitle("");
-    setSigners([{ email: "", full_name: "" }]);
+    setSigners([{ email: "", full_name: "", is_self: false }]);
   };
 
   const handleClose = (open: boolean) => {
@@ -79,7 +92,7 @@ export function UploadDialog({
     onOpenChange(open);
   };
 
-  // --- Upload step ---
+  // ── Upload step ───────────────────────────────────────────────────────────
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -91,9 +104,7 @@ export function UploadDialog({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files?.length) {
-      handleFilesSelect(Array.from(e.dataTransfer.files));
-    }
+    if (e.dataTransfer.files?.length) handleFilesSelect(Array.from(e.dataTransfer.files));
   };
 
   const validateFile = (f: File): string | null => {
@@ -121,8 +132,6 @@ export function UploadDialog({
     }
   };
 
-  const handleFileSelect = (selectedFile: File) => handleFilesSelect([selectedFile]);
-
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.length) handleFilesSelect(Array.from(e.target.files));
   };
@@ -134,12 +143,9 @@ export function UploadDialog({
     const formData = new FormData();
     formData.append("file", f);
     formData.append("signing_mode", mode);
-    const response = await fetch("/api/documents/upload", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to upload document");
+    const res = await fetch("/api/documents/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to upload document");
     return data.document;
   };
 
@@ -148,7 +154,6 @@ export function UploadDialog({
     setUploading(true);
 
     if (isMultiMode) {
-      // Multi-file path: upload all, then close and refresh
       const allFiles = [file, ...extraFiles];
       setUploadProgress({ done: 0, total: allFiles.length });
       let successCount = 0;
@@ -174,7 +179,6 @@ export function UploadDialog({
         onUploadSuccess();
       }
     } else {
-      // Single-file path: upload then go to signers step
       try {
         const doc = await uploadSingleFile(file, signingMode);
         setDocumentId(doc.id);
@@ -196,54 +200,24 @@ export function UploadDialog({
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
-  // --- Signers step ---
-  const addSigner = () => setSigners([...signers, { email: "", full_name: "" }]);
-
-  const removeSigner = (index: number) => {
-    if (signers.length === 1) {
-      toast.error("You must have at least one signer");
-      return;
-    }
-    setSigners(signers.filter((_, i) => i !== index));
-  };
-
-  const updateSigner = (index: number, field: keyof Signer, value: string) => {
-    const updated = [...signers];
-    updated[index][field] = value;
-    setSigners(updated);
-  };
-
-  const validateSigners = () => {
-    for (let i = 0; i < signers.length; i++) {
-      const s = signers[i];
-      if (!s.email || !s.full_name) {
-        toast.error(`Signer #${i + 1}: All fields are required`);
-        return false;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.email)) {
-        toast.error(`Signer #${i + 1}: Invalid email address`);
-        return false;
-      }
-    }
-    const emails = signers.map((s) => s.email.toLowerCase());
-    if (emails.length !== new Set(emails).size) {
-      toast.error("Each signer must have a unique email address");
-      return false;
-    }
-    return true;
-  };
-
+  // ── Signers step ──────────────────────────────────────────────────────────
   const handleSendForSigning = async () => {
-    if (!validateSigners() || !documentId) return;
+    if (!validateSigners(signers) || !documentId) return;
     setSubmittingSigners(true);
     try {
-      const response = await fetch(`/api/documents/${documentId}/signers`, {
+      const res = await fetch(`/api/documents/${documentId}/signers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signers }),
+        body: JSON.stringify({
+          signers: signers.map((s) => ({
+            email: s.email,
+            full_name: s.full_name,
+            is_self: s.is_self,
+          })),
+        }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to add signers");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add signers");
       toast.success("Document sent for signing!");
       resetAll();
       onOpenChange(false);
@@ -268,7 +242,9 @@ export function UploadDialog({
         {/* Step indicator */}
         <div className="flex items-center space-x-2 mb-1">
           <div className={`flex items-center space-x-1.5 text-xs font-medium ${step === "upload" ? "text-neutral-900" : "text-gray-400"}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${step === "upload" ? "bg-neutral-900 text-white" : "bg-gray-200 text-gray-500"}`}>1</span>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${step === "signers" ? "bg-green-500 text-white" : "bg-neutral-900 text-white"}`}>
+              {step === "signers" ? "✓" : "1"}
+            </span>
             <span>Upload</span>
           </div>
           <div className="flex-1 h-px bg-gray-200" />
@@ -285,10 +261,11 @@ export function UploadDialog({
           <DialogDescription>
             {step === "upload"
               ? "Upload a PDF document to get started with signing"
-              : "Add signers in the order you want them to sign. You can skip this and add them later."}
+              : "Add signers in the order you want them to sign. Drag rows to reorder. You can skip this and add them later."}
           </DialogDescription>
         </DialogHeader>
 
+        {/* ── Upload step ── */}
         {step === "upload" && (
           <div className="space-y-4">
             {!file ? (
@@ -319,7 +296,6 @@ export function UploadDialog({
               </div>
             ) : (
               <>
-                {/* Primary file */}
                 <div className="border rounded-lg p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -335,7 +311,6 @@ export function UploadDialog({
                   </div>
                 </div>
 
-                {/* Extra files (multi-file mode) */}
                 {extraFiles.length > 0 && (
                   <div className="space-y-2">
                     {extraFiles.map((f, i) => (
@@ -351,71 +326,43 @@ export function UploadDialog({
                       </div>
                     ))}
                     <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                      Bulk upload: {1 + extraFiles.length} files will be uploaded as draft documents. Use "Bulk Sign" on the dashboard to sign them all at once.
+                      Bulk upload: {1 + extraFiles.length} files will be uploaded as draft documents. Use &quot;Bulk Sign&quot; on the dashboard to sign them all at once.
                     </p>
                   </div>
                 )}
 
-                {/* Signing mode (single-file only) */}
-                {!isMultiMode && <div className="space-y-3">
-                  <Label className="text-sm font-medium">Signing Mode</Label>
-                  <div className="space-y-2">
-                    <label
-                      className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                        signingMode === "simple" ? "border-neutral-900 bg-neutral-50" : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="signing_mode"
-                        value="simple"
-                        checked={signingMode === "simple"}
-                        onChange={(e) => setSigningMode(e.target.value as SigningMode)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <PenTool className="h-4 w-4 text-neutral-700" />
-                          <span className="font-medium text-sm">Simple Signature</span>
+                {!isMultiMode && (
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Signing Mode</Label>
+                    <div className="space-y-2">
+                      <label className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${signingMode === "simple" ? "border-neutral-900 bg-neutral-50" : "border-gray-200 hover:border-gray-300"}`}>
+                        <input type="radio" name="signing_mode" value="simple" checked={signingMode === "simple"} onChange={(e) => setSigningMode(e.target.value as SigningMode)} className="mt-1" />
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <PenTool className="h-4 w-4 text-neutral-700" />
+                            <span className="font-medium text-sm">Simple Signature</span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">Signers draw their signature without placing it on the document</p>
                         </div>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Signers draw their signature without placing it on the document
-                        </p>
-                      </div>
-                    </label>
-
-                    <label
-                      className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                        signingMode === "positioned" ? "border-neutral-900 bg-neutral-50" : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="signing_mode"
-                        value="positioned"
-                        checked={signingMode === "positioned"}
-                        onChange={(e) => setSigningMode(e.target.value as SigningMode)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <MousePointerClick className="h-4 w-4 text-neutral-700" />
-                          <span className="font-medium text-sm">Positioned Signature</span>
+                      </label>
+                      <label className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${signingMode === "positioned" ? "border-neutral-900 bg-neutral-50" : "border-gray-200 hover:border-gray-300"}`}>
+                        <input type="radio" name="signing_mode" value="positioned" checked={signingMode === "positioned"} onChange={(e) => setSigningMode(e.target.value as SigningMode)} className="mt-1" />
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <MousePointerClick className="h-4 w-4 text-neutral-700" />
+                            <span className="font-medium text-sm">Positioned Signature</span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">Signers click on the document to place their signature at specific locations</p>
                         </div>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Signers click on the document to place their signature at specific locations
-                        </p>
-                      </div>
-                    </label>
+                      </label>
+                    </div>
                   </div>
-                </div>}
+                )}
               </>
             )}
 
             <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => handleClose(false)}>
-                Cancel
-              </Button>
+              <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
               <Button onClick={handleUpload} disabled={!file || uploading}>
                 {uploading && uploadProgress
                   ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
@@ -423,77 +370,21 @@ export function UploadDialog({
                   ? "Uploading…"
                   : isMultiMode
                   ? `Upload All (${1 + extraFiles.length})`
-                  : (
-                    <>
-                      Continue
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </>
-                  )}
+                  : <><span>Continue</span><ArrowRight className="h-4 w-4 ml-2" /></>}
               </Button>
             </div>
           </div>
         )}
 
+        {/* ── Signers step — uses shared component ── */}
         {step === "signers" && (
           <div className="space-y-4">
-            <div className="space-y-3">
-              {signers.map((signer, index) => (
-                <div key={index} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center">
-                        <span className="text-xs font-medium text-neutral-700">{index + 1}</span>
-                      </div>
-                      <span className="font-medium text-sm text-gray-700">Signer #{index + 1}</span>
-                    </div>
-                    {signers.length > 1 && (
-                      <button
-                        onClick={() => removeSigner(index)}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`name-${index}`} className="text-xs">Full Name</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                        <Input
-                          id={`name-${index}`}
-                          type="text"
-                          placeholder="John Doe"
-                          value={signer.full_name}
-                          onChange={(e) => updateSigner(index, "full_name", e.target.value)}
-                          className="pl-9 h-9 text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`email-${index}`} className="text-xs">Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                        <Input
-                          id={`email-${index}`}
-                          type="email"
-                          placeholder="john@example.com"
-                          value={signer.email}
-                          onChange={(e) => updateSigner(index, "email", e.target.value)}
-                          className="pl-9 h-9 text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <Button type="button" variant="outline" onClick={addSigner} className="w-full">
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add Another Signer
-            </Button>
+            <SignersListEditor
+              signers={signers}
+              onChange={setSigners}
+              ownerEmail={ownerEmail}
+              ownerName={ownerName}
+            />
 
             <div className="flex justify-between items-center pt-2 border-t">
               <div className="flex items-center space-x-2">
@@ -513,9 +404,7 @@ export function UploadDialog({
                 </Button>
               </div>
               <Button onClick={handleSendForSigning} disabled={submittingSigners}>
-                {submittingSigners
-                  ? "Sending..."
-                  : `Send for Signing (${signers.length})`}
+                {submittingSigners ? "Sending..." : `Send for Signing (${signers.length})`}
               </Button>
             </div>
           </div>
