@@ -97,7 +97,7 @@ export function SignersListEditor({
               </div>
               <span className="font-medium text-sm text-gray-700">Signer #{index + 1}</span>
               {signer.is_self && (
-                <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700 border-blue-200 py-0">
+                <Badge variant="secondary" className="text-xs py-0">
                   <UserCheck className="h-3 w-3 mr-1" />
                   You
                 </Badge>
@@ -148,7 +148,7 @@ export function SignersListEditor({
           </div>
 
           {signer.is_self && (
-            <p className="text-xs text-blue-600">
+            <p className="text-xs text-gray-500">
               You&apos;ll be prompted to sign directly in the dashboard when it&apos;s your turn.
             </p>
           )}
@@ -166,7 +166,7 @@ export function SignersListEditor({
           variant="outline"
           onClick={addSelf}
           disabled={selfAdded}
-          className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-50"
+          className="flex-1 disabled:opacity-50"
         >
           <UserCheck className="h-4 w-4 mr-2" />
           Add Myself

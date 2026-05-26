@@ -244,16 +244,16 @@ export default function DocumentDetailPage() {
   const StatusIcon = statusConfig.icon;
 
   // Detect when it is the owner's turn in the sequential signing flow
-  const ownerIsCurrentSigner =
+  const ownerCurrentSigner =
     document.status === "pending" &&
     document.signers &&
-    document.signers.length > 0 &&
-    (() => {
-      const current = document.signers.find(
-        (s) => s.signing_order === document.current_signer_index + 1
-      );
-      return current?.is_self === true && current?.status === "pending";
-    })();
+    document.signers.length > 0
+      ? document.signers.find(
+          (s) => s.signing_order === document.current_signer_index + 1 && s.is_self && s.status === "pending"
+        ) ?? null
+      : null;
+  const ownerIsCurrentSigner = ownerCurrentSigner !== null;
+  const ownerIsFirst = ownerCurrentSigner?.signing_order === 1;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -344,12 +344,14 @@ export default function DocumentDetailPage() {
 
       {/* Your-turn-to-sign banner */}
       {ownerIsCurrentSigner && (
-        <div className="mb-4 flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
-          <PenLine className="h-5 w-5 text-blue-600 flex-shrink-0" />
+        <div className="mb-4 flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 px-5 py-4">
+          <PenLine className="h-5 w-5 text-neutral-700 flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-blue-900">It&apos;s your turn to sign</p>
-            <p className="text-xs text-blue-700 mt-0.5">
-              The previous signer has completed their step. Sign now to keep the workflow moving.
+            <p className="text-sm font-semibold text-neutral-900">Your signature is required</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {ownerIsFirst
+                ? "You're first in the signing sequence. Sign now to get things started."
+                : "The previous signer has completed their step. Sign now to keep the workflow moving."}
             </p>
           </div>
           <Button size="sm" onClick={() => setSequentialSignDialogOpen(true)}>
@@ -488,7 +490,7 @@ export default function DocumentDetailPage() {
                         <div className="flex items-center gap-2">
                           <p className="font-medium">{signer.full_name || "No name"}</p>
                           {signer.is_self && (
-                            <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700 border-blue-200 py-0">
+                            <Badge variant="secondary" className="text-xs py-0">
                               You
                             </Badge>
                           )}
