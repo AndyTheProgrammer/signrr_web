@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { UploadDialog } from "@/components/documents/upload-dialog";
@@ -8,16 +8,20 @@ import { DocumentList } from "@/components/documents/document-list";
 import {
   Upload,
   Plus,
-  PenLine,
   CheckSquare,
   X,
   Layers,
   FileUp,
+  FileText,
+  Clock,
+  FileSignature,
+  CheckCircle2,
 } from "lucide-react";
 import { DocumentsToSign } from "@/components/documents/documents-to-sign";
 import { Document } from "@/types/database";
 import { toast } from "sonner";
 import { saveBatch } from "@/lib/utils/upload-batches";
+import { createClient } from "@/lib/supabase/client";
 
 // Returns the newly created document's ID so we can track it in a batch
 async function uploadFile(file: File): Promise<string> {
@@ -30,16 +34,37 @@ async function uploadFile(file: File): Promise<string> {
   return data.document.id as string;
 }
 
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function formatTodayLong() {
+  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [userName, setUserName] = useState("");
 
   // Selection state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loadedDocuments, setLoadedDocuments] = useState<Document[]>([]);
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => {
+      if (data.user) {
+        const name = data.user.user_metadata?.full_name || data.user.email || "";
+        setUserName(name.split(" ")[0]);
+      }
+    });
+  }, []);
 
   // Page-level drag-and-drop state
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -174,10 +199,12 @@ export default function DashboardPage() {
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage and track your documents</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {getGreeting()}{userName ? `, ${userName}` : ""}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">{formatTodayLong()}</p>
         </div>
 
         <div className="flex items-center space-x-2">
@@ -202,7 +229,6 @@ export default function DashboardPage() {
                 <CheckSquare className="h-4 w-4 mr-2" />
                 Select
               </Button>
-              {/* Direct entry to the batch-grouped bulk sign page */}
               <Button
                 variant="outline"
                 onClick={() => router.push("/dashboard/bulk-sign")}
@@ -219,16 +245,54 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Awaiting signature ── */}
+      {/* ── Stats cards ── */}
       {!selectionMode && (
-        <div className="mb-10">
-          <div className="flex items-center space-x-2 mb-4">
-            <PenLine className="h-5 w-5 text-neutral-700" />
-            <h2 className="text-base font-semibold">Awaiting Your Signature</h2>
-          </div>
-          <DocumentsToSign />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          {[
+            {
+              label: "Total Documents",
+              value: loadedDocuments.filter((d) => d.status !== "cancelled").length,
+              icon: FileText,
+              iconClass: "text-neutral-500",
+              bgClass: "bg-neutral-50",
+            },
+            {
+              label: "Drafts",
+              value: loadedDocuments.filter((d) => d.status === "draft").length,
+              icon: Clock,
+              iconClass: "text-amber-500",
+              bgClass: "bg-amber-50",
+            },
+            {
+              label: "In Progress",
+              value: loadedDocuments.filter((d) => d.status === "pending").length,
+              icon: FileSignature,
+              iconClass: "text-blue-500",
+              bgClass: "bg-blue-50",
+            },
+            {
+              label: "Completed",
+              value: loadedDocuments.filter((d) => d.status === "completed").length,
+              icon: CheckCircle2,
+              iconClass: "text-green-500",
+              bgClass: "bg-green-50",
+            },
+          ].map(({ label, value, icon: Icon, iconClass, bgClass }) => (
+            <div key={label} className="bg-white border rounded-xl p-4 flex items-center space-x-4">
+              <div className={`${bgClass} rounded-lg p-2.5`}>
+                <Icon className={`h-5 w-5 ${iconClass}`} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold tracking-tight">{value}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
+
+      {/* ── Awaiting signature ── */}
+      {!selectionMode && <DocumentsToSign />}
 
       {/* ── Your documents ── */}
       <div>
