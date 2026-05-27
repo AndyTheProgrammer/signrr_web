@@ -290,10 +290,20 @@ export default function DocumentDetailPage() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <Button onClick={handleDownload} disabled={document.status === "draft"}>
-          <Download className="h-4 w-4 mr-2" />
-          {document.status === "completed" ? "Download Signed PDF" : "Download PDF"}
-        </Button>
+        <div className="relative group inline-block">
+          <Button
+            onClick={handleDownload}
+            disabled={document.status !== "completed"}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {document.status === "completed" ? "Download Signed PDF" : "Download PDF"}
+          </Button>
+          {document.status !== "completed" && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+              Available once all signers have signed
+            </div>
+          )}
+        </div>
 
         {/* Send by Email — only for completed documents */}
         {document.status === "completed" && (

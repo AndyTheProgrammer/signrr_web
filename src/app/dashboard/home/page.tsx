@@ -98,6 +98,9 @@ export default function DashboardPage() {
     dragCountRef.current = 0;
     setIsDraggingOver(false);
 
+    // No files means a DOM element was dragged (e.g. signer rows) — ignore silently
+    if (!e.dataTransfer.files.length) return;
+
     const files = Array.from(e.dataTransfer.files).filter(
       (f) => f.type === "application/pdf"
     );

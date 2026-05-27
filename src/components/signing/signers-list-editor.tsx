@@ -30,9 +30,10 @@ export function SignersListEditor({
   const dragIndex = useRef<number | null>(null);
   const dragOverIndex = useRef<number | null>(null);
 
-  const handleDragStart = (index: number) => { dragIndex.current = index; };
-  const handleDragEnter = (index: number) => { dragOverIndex.current = index; };
-  const handleDragEnd = () => {
+  const handleDragStart = (e: React.DragEvent, index: number) => { e.stopPropagation(); dragIndex.current = index; };
+  const handleDragEnter = (e: React.DragEvent, index: number) => { e.stopPropagation(); dragOverIndex.current = index; };
+  const handleDragEnd = (e: React.DragEvent) => {
+    e.stopPropagation();
     const from = dragIndex.current;
     const to = dragOverIndex.current;
     if (from !== null && to !== null && from !== to) {
@@ -78,20 +79,22 @@ export function SignersListEditor({
 
   return (
     <div className="space-y-3">
-      {signers.map((signer, index) => (
+      {signers.map((signer, index) => {
+        const canDrag = signer.is_self || (signer.email.trim() !== "" && signer.full_name.trim() !== "");
+        return (
         <div
           key={index}
-          draggable
-          onDragStart={() => handleDragStart(index)}
-          onDragEnter={() => handleDragEnter(index)}
+          draggable={canDrag}
+          onDragStart={(e) => canDrag && handleDragStart(e, index)}
+          onDragEnter={(e) => handleDragEnter(e, index)}
           onDragEnd={handleDragEnd}
-          onDragOver={(e) => e.preventDefault()}
-          className="border rounded-lg p-3 space-y-3 bg-white cursor-grab active:cursor-grabbing select-none"
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className={`border rounded-lg p-3 space-y-3 bg-white select-none ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         >
           {/* Row header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <GripVertical className="h-4 w-4 text-gray-300 flex-shrink-0" />
+              <GripVertical className={`h-4 w-4 flex-shrink-0 ${canDrag ? "text-gray-300" : "text-gray-200"}`} />
               <div className="w-6 h-6 rounded-full bg-neutral-100 flex items-center justify-center flex-shrink-0">
                 <span className="text-xs font-medium text-neutral-700">{index + 1}</span>
               </div>
@@ -153,7 +156,8 @@ export function SignersListEditor({
             </p>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Add buttons */}
       <div className="flex gap-2">
