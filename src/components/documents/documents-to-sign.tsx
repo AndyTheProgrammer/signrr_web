@@ -84,7 +84,8 @@ function Panel({
       {/* Document content */}
       {isSign ? (
         <a
-          href={`/sign/${doc.magic_token}`}
+          // href={`/sign/${doc.magic_token}`}
+          href={`/dashboard/documents/${doc.id}`}
           className="group flex flex-1 hover:bg-blue-50/30 transition-colors"
         >
           <div className="w-1 bg-blue-500 flex-shrink-0" />
