@@ -519,6 +519,7 @@ export default function DocumentDetailPage() {
                     <div className="flex items-center space-x-2">
                       {getSignerStatusBadge(signer.status)}
                       {signer.status === "pending" &&
+                        !signer.is_self &&
                         signer.signing_order === document.current_signer_index + 1 && (
                           <Button
                             variant="ghost"

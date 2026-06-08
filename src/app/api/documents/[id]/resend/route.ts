@@ -5,7 +5,7 @@ import { sendEmail } from "@/lib/resend/client";
 import crypto from "crypto";
 
 const resendSchema = z.object({
-  signer_id: z.string().uuid(),
+  signer_id: z.uuid(),
 });
 
 export async function POST(
@@ -101,11 +101,19 @@ export async function POST(
       }
     }
 
-    // Send email
+    // Guard: is_self signers sign via the dashboard, not email
+    if (signer.is_self) {
+      return NextResponse.json(
+        { error: "This signer uses the dashboard to sign — no email is needed" },
+        { status: 400 }
+      );
+    }
+
+    // Send email and check the result (sendEmail never throws — it returns success/failure)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const signingUrl = `${appUrl}/sign/${tokenToUse}`;
 
-    await sendEmail({
+    const result = await sendEmail({
       to: signer.email,
       subject: `Reminder: Please sign "${document.title}"`,
       html: `
@@ -123,6 +131,14 @@ export async function POST(
           </div>
         </body>`,
     });
+
+    if (!result.success) {
+      console.error("Failed to send resend email:", result.error);
+      return NextResponse.json(
+        { error: "Failed to send email — please try again" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ message: "Signing link resent successfully" });
   } catch (error) {
