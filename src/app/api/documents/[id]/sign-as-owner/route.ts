@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
 import { mergeSignaturesOntoPdf } from "@/lib/pdf/signer";
+import { yourTurnToSignEmail, documentCompletedEmail } from "@/lib/resend/templates";
 
 const annotationSchema = z.object({
   type: z.enum(["text", "date"]),
@@ -147,20 +148,11 @@ export async function POST(
           await sendEmail({
             to: nextSigner.email,
             subject: `Your turn to sign "${document.title}"`,
-            html: `
-              <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
-                  <h2 style="margin-top:0;">It's Your Turn to Sign</h2>
-                  <p>Hello ${nextSigner.full_name},</p>
-                  <p>The previous signer has completed their signature. Please sign <strong>"${document.title}"</strong> now.</p>
-                  <div style="text-align:center;margin:30px 0;">
-                    <a href="${signingUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
-                      Sign Document Now
-                    </a>
-                  </div>
-                  <p style="font-size:13px;color:#666;">This link expires in 48 hours.</p>
-                </div>
-              </body>`,
+            html: yourTurnToSignEmail(
+              nextSigner.full_name ?? nextSigner.email,
+              document.title,
+              signingUrl
+            ),
           });
         } catch (emailError) {
           console.error("Error sending email to next signer:", emailError);
@@ -219,19 +211,11 @@ export async function POST(
         await sendEmail({
           to: ownerProfile.email,
           subject: `"${document.title}" has been fully signed`,
-          html: `
-            <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-              <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
-                <h2 style="margin-top:0;">Document Fully Signed ✓</h2>
-                <p>Hello ${ownerProfile.full_name || "there"},</p>
-                <p>All signers have completed their signatures on <strong>"${document.title}"</strong>.</p>
-                <div style="text-align:center;margin:30px 0;">
-                  <a href="${dashboardUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
-                    Download Signed Document
-                  </a>
-                </div>
-              </div>
-            </body>`,
+          html: documentCompletedEmail(
+            ownerProfile.full_name ?? "",
+            document.title,
+            dashboardUrl
+          ),
         });
       }
     } catch (ownerEmailError) {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { generateMagicToken, getMagicTokenExpiry } from "@/lib/utils/magic-token";
 import { sendEmail } from "@/lib/resend/client";
+import { signingInvitationEmail } from "@/lib/resend/templates";
 
 const signerSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -108,33 +109,12 @@ export async function POST(
         await sendEmail({
           to: firstSigner.email,
           subject: `You've been invited to sign "${document.title}"`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              </head>
-              <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
-                <div style="background:#f8f9fa;border-radius:8px;padding:30px;margin-bottom:20px;">
-                  <h1 style="color:#1a1a1a;margin-top:0;font-size:24px;">Document Signature Request</h1>
-                  <p style="font-size:16px;">Hello ${firstSigner.full_name},</p>
-                  <p style="font-size:16px;">You've been invited to sign the document <strong>"${document.title}"</strong>.</p>
-                  <p style="font-size:16px;">You are signer #${firstSigner.signing_order} in the signing sequence.</p>
-                  <div style="text-align:center;margin:30px 0;">
-                    <a href="${signingUrl}" style="background:#0070f3;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;font-size:16px;display:inline-block;">
-                      Sign Document
-                    </a>
-                  </div>
-                  <p style="font-size:14px;color:#666;margin-top:30px;">This link will expire in 48 hours.</p>
-                  <p style="font-size:14px;color:#666;">If you didn't expect this email, you can safely ignore it.</p>
-                </div>
-                <div style="text-align:center;color:#999;font-size:12px;margin-top:20px;">
-                  <p>Powered by SignrR - Digital Document Signing</p>
-                </div>
-              </body>
-            </html>
-          `,
+          html: signingInvitationEmail(
+            firstSigner.full_name ?? firstSigner.email,
+            document.title,
+            signingUrl,
+            firstSigner.signing_order
+          ),
         });
       } catch (emailError) {
         console.error("Error sending invitation email:", emailError);

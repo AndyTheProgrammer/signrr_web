@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
 import { generateMagicToken, getMagicTokenExpiry } from "@/lib/utils/magic-token";
+import { signingReminderEmail } from "@/lib/resend/templates";
 
 const resendSchema = z.object({
   signer_id: z.uuid(),
@@ -101,20 +102,11 @@ export async function POST(
     const result = await sendEmail({
       to: signer.email,
       subject: `Reminder: Please sign "${document.title}"`,
-      html: `
-        <body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
-            <h2 style="margin-top:0;">Signing Reminder</h2>
-            <p>Hello ${signer.full_name},</p>
-            <p>This is a fresh signing link for <strong>"${document.title}"</strong>. Any previous links are no longer valid.</p>
-            <div style="text-align:center;margin:30px 0;">
-              <a href="${signingUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
-                Sign Document Now
-              </a>
-            </div>
-            <p style="font-size:13px;color:#666;">This link expires in 48 hours.</p>
-          </div>
-        </body>`,
+      html: signingReminderEmail(
+        signer.full_name ?? signer.email,
+        document.title,
+        signingUrl
+      ),
     });
 
     if (!result.success) {
