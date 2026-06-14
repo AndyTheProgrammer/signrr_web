@@ -80,6 +80,46 @@ function cropToCanvas(
   return canvas;
 }
 
+// Crops a canvas down to the bounding box of its non-transparent pixels so
+// the image we embed in the PDF has no invisible padding that shifts placement.
+function trimTransparentPixels(src: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = src.getContext("2d")!;
+  const { width, height } = src;
+  const { data } = ctx.getImageData(0, 0, width, height);
+
+  let minX = width, maxX = 0, minY = height, maxY = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Threshold of 5 captures tapering stroke ends (alpha 2–9%) that would
+      // otherwise shift the bounding-box centre away from the visual ink centre.
+      if (data[(y * width + x) * 4 + 3] > 5) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // Nothing drawn — return as-is so callers can still detect an empty canvas
+  if (minX > maxX || minY > maxY) return src;
+
+  // 8px padding keeps ink well away from the image edge on all sides
+  const pad = 8;
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(width - 1, maxX + pad);
+  maxY = Math.min(height - 1, maxY + pad);
+
+  const tw = maxX - minX + 1;
+  const th = maxY - minY + 1;
+  const trimmed = document.createElement("canvas");
+  trimmed.width = tw;
+  trimmed.height = th;
+  trimmed.getContext("2d")!.drawImage(src, minX, minY, tw, th, 0, 0, tw, th);
+  return trimmed;
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const MIN_CROP_PX = 20;
 
@@ -136,7 +176,7 @@ export function SignatureCanvasComponent({
 
   const getDrawnDataUrl = (): string | null => {
     if (sigCanvasRef.current?.isEmpty()) return null;
-    return sigCanvasRef.current!.toDataURL("image/png");
+    return trimTransparentPixels(sigCanvasRef.current!.getCanvas()).toDataURL("image/png");
   };
 
   const handleDrawConfirm = () => {
@@ -296,7 +336,7 @@ export function SignatureCanvasComponent({
     const { width, height } = el.getBoundingClientRect();
     const canvas = cropToCanvas(el, crop, width || displaySize.w, height || displaySize.h);
     if (!bgRemovedUrl) removeBackground(canvas);
-    return canvas;
+    return trimTransparentPixels(canvas);
   };
 
   const handleUploadConfirm = () => {

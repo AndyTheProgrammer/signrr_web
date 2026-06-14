@@ -58,19 +58,27 @@ export async function mergeSignaturesOntoPdf(
         const pageIndex = signer.signature_position.page - 1;
         if (pageIndex >= 0 && pageIndex < pages.length) {
           const page = pages[pageIndex];
-          const { width: pw, height: ph } = page.getSize();
+          // Use CropBox when available — pdfjs (react-pdf) renders the CropBox,
+          // so percentages from the viewer are relative to that region, not the full MediaBox.
+          const cropBox = page.getCropBox();
+          const mediaBox = page.getMediaBox();
+          const box = cropBox ?? mediaBox;
+          const originX = box.x;   // lower-left x of the visible region in PDF space
+          const originY = box.y;   // lower-left y of the visible region in PDF space
+          const pw = box.width;
+          const ph = box.height;
           // Use the user-set width (% of page) if provided, else default 150pt
           const resolvedSigWidth = signer.signature_position.width
             ? (signer.signature_position.width / 100) * pw
             : sigWidth;
           const resolvedSigHeight =
             (signatureImage.height / signatureImage.width) * resolvedSigWidth;
-          const x = (signer.signature_position.x / 100) * pw - resolvedSigWidth / 2;
-          const y =
-            ph - (signer.signature_position.y / 100) * ph - resolvedSigHeight / 2;
+          // Convert viewer percentages (origin top-left) → PDF coordinate space (origin bottom-left of box)
+          const x = originX + (signer.signature_position.x / 100) * pw - resolvedSigWidth / 2;
+          const y = originY + ph - (signer.signature_position.y / 100) * ph - resolvedSigHeight / 2;
           page.drawImage(signatureImage, {
-            x: Math.max(0, Math.min(x, pw - resolvedSigWidth)),
-            y: Math.max(0, Math.min(y, ph - resolvedSigHeight)),
+            x: Math.max(originX, Math.min(x, originX + pw - resolvedSigWidth)),
+            y: Math.max(originY, Math.min(y, originY + ph - resolvedSigHeight)),
             width: resolvedSigWidth,
             height: resolvedSigHeight,
           });
@@ -97,21 +105,23 @@ export async function mergeSignaturesOntoPdf(
         if (pageIndex < 0 || pageIndex >= pages.length) continue;
 
         const page = pages[pageIndex];
-        const { width: pw, height: ph } = page.getSize();
+        const cropBox = page.getCropBox();
+        const mediaBox = page.getMediaBox();
+        const box = cropBox ?? mediaBox;
+        const originX = box.x;
+        const originY = box.y;
+        const pw = box.width;
+        const ph = box.height;
         // Convert display px → PDF points (approx 0.75 ratio)
         const fontSize = annotation.fontSize ? Math.round(annotation.fontSize * 0.75) : 11;
 
-        // The browser overlay is centered at (annotation.x%, annotation.y%) via
-        // translate(-50%, -50%). To match in the PDF we must subtract half the
-        // text width (x) and half the text height (y) so the text appears at the
-        // same visual center rather than being offset right/down.
         const textWidth = helvetica.widthOfTextAtSize(annotation.content, fontSize);
-        const cx = (annotation.x / 100) * pw - textWidth / 2;
-        const cy = ph - (annotation.y / 100) * ph - fontSize / 2;
+        const cx = originX + (annotation.x / 100) * pw - textWidth / 2;
+        const cy = originY + ph - (annotation.y / 100) * ph - fontSize / 2;
 
         page.drawText(annotation.content, {
-          x: Math.max(4, Math.min(cx, pw - textWidth - 4)),
-          y: Math.max(4, cy),
+          x: Math.max(originX + 4, Math.min(cx, originX + pw - textWidth - 4)),
+          y: Math.max(originY + 4, cy),
           size: fontSize,
           font: helvetica,
           color: rgb(0, 0, 0),

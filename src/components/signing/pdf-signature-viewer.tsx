@@ -133,13 +133,27 @@ export function PdfSignatureViewer({
     [goToPage, currentPage]
   );
 
+  // Returns the bounding rect of the actual PDF canvas (not the outer border div).
+  // This eliminates any offset introduced by borders or react-pdf wrapper elements.
+  const getCanvasRect = useCallback((): DOMRect | null => {
+    if (!pageRef.current) return null;
+    const canvas = pageRef.current.querySelector("canvas");
+    return (canvas ?? pageRef.current).getBoundingClientRect();
+  }, []);
+
   // Click-to-place new items on the PDF
   const handlePageClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!canPlace || !pageRef.current) return;
-      const rect = pageRef.current.getBoundingClientRect();
-      const x = clamp(((e.clientX - rect.left) / rect.width) * 100, 2, 98);
-      const y = clamp(((e.clientY - rect.top) / rect.height) * 100, 2, 98);
+      const rect = getCanvasRect();
+      if (!rect) return;
+      // Use canvas rect for the ORIGIN (left/top) so the 1px border is excluded.
+      // Use clientWidth/Height for the DENOMINATOR — CSS uses these integer values
+      // for `left: x%` / `top: y%` overlay positioning, so the two stay in sync.
+      const w = pageRef.current.clientWidth;
+      const h = pageRef.current.clientHeight;
+      const x = clamp(((e.clientX - rect.left) / w) * 100, 2, 98);
+      const y = clamp(((e.clientY - rect.top) / h) * 100, 2, 98);
 
       if (activeTool === "signature" && drawnSignature) {
         setPlacedItems((prev) => [
@@ -204,9 +218,11 @@ export function PdfSignatureViewer({
   const onDragMove = useCallback((e: React.PointerEvent, item: PlacedItem) => {
     if (!dragRef.current || dragRef.current.id !== item.id || !pageRef.current)
       return;
-    const rect = pageRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - dragRef.current.startPX) / rect.width) * 100;
-    const dy = ((e.clientY - dragRef.current.startPY) / rect.height) * 100;
+    // Use clientWidth/Height (content area only, no border) for delta conversion
+    const w = pageRef.current.clientWidth;
+    const h = pageRef.current.clientHeight;
+    const dx = ((e.clientX - dragRef.current.startPX) / w) * 100;
+    const dy = ((e.clientY - dragRef.current.startPY) / h) * 100;
     setPlacedItems((prev) =>
       prev.map((i) =>
         i.id === item.id
@@ -253,8 +269,7 @@ export function PdfSignatureViewer({
         return;
       const { startPX, origVal, isWidth } = resizeRef.current;
       if (isWidth) {
-        const rect = pageRef.current.getBoundingClientRect();
-        const dx = ((e.clientX - startPX) / rect.width) * 100;
+        const dx = ((e.clientX - startPX) / pageRef.current.clientWidth) * 100;
         setPlacedItems((prev) =>
           prev.map((i) =>
             i.id === item.id
