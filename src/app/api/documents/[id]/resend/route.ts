@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
-import crypto from "crypto";
+import { generateMagicToken, getMagicTokenExpiry } from "@/lib/utils/magic-token";
 
 const resendSchema = z.object({
   signer_id: z.uuid(),
@@ -71,36 +71,6 @@ export async function POST(
       );
     }
 
-    // Check if existing token is still valid (within 48h window)
-    const expiryDate = new Date(signer.magic_token_expires_at);
-    const isTokenValid = expiryDate > new Date();
-
-    let tokenToUse: string;
-    let expiresAt: string;
-
-    if (isTokenValid) {
-      // Reuse existing token if still valid
-      tokenToUse = signer.magic_token;
-      expiresAt = signer.magic_token_expires_at;
-    } else {
-      // Generate fresh token only if expired
-      tokenToUse = crypto.randomBytes(32).toString("base64url");
-      expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-
-      const { error: updateError } = await supabase
-        .from("signers")
-        .update({
-          magic_token: tokenToUse,
-          magic_token_expires_at: expiresAt,
-        })
-        .eq("id", signer_id);
-
-      if (updateError) {
-        console.error("Error updating token:", updateError);
-        return NextResponse.json({ error: "Failed to regenerate link" }, { status: 500 });
-      }
-    }
-
     // Guard: is_self signers sign via the dashboard, not email
     if (signer.is_self) {
       return NextResponse.json(
@@ -109,9 +79,24 @@ export async function POST(
       );
     }
 
+    // Always regenerate — guarantees a fresh 48-hour link and invalidates any
+    // previous links the signatory may still have in their inbox.
+    const newToken = generateMagicToken();
+    const newExpiry = getMagicTokenExpiry();
+
+    const { error: updateError } = await supabase
+      .from("signers")
+      .update({ magic_token: newToken, magic_token_expires_at: newExpiry })
+      .eq("id", signer_id);
+
+    if (updateError) {
+      console.error("Error regenerating token:", updateError);
+      return NextResponse.json({ error: "Failed to regenerate link" }, { status: 500 });
+    }
+
     // Send email and check the result (sendEmail never throws — it returns success/failure)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const signingUrl = `${appUrl}/sign/${tokenToUse}`;
+    const signingUrl = `${appUrl}/sign/${newToken}`;
 
     const result = await sendEmail({
       to: signer.email,
@@ -121,13 +106,13 @@ export async function POST(
           <div style="background:#f8f9fa;border-radius:8px;padding:30px;">
             <h2 style="margin-top:0;">Signing Reminder</h2>
             <p>Hello ${signer.full_name},</p>
-            <p>You have been sent a new signing link for <strong>"${document.title}"</strong>.</p>
+            <p>This is a fresh signing link for <strong>"${document.title}"</strong>. Any previous links are no longer valid.</p>
             <div style="text-align:center;margin:30px 0;">
               <a href="${signingUrl}" style="background:#111;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:500;">
                 Sign Document Now
               </a>
             </div>
-            <p style="font-size:13px;color:#666;">This link expires in 48 hours${!isTokenValid ? ". Any previous links are now invalid." : "."}</p>
+            <p style="font-size:13px;color:#666;">This link expires in 48 hours.</p>
           </div>
         </body>`,
     });
