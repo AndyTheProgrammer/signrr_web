@@ -3,14 +3,29 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { SignatureCanvasComponent } from "@/components/signing/signature-canvas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { SignaturePosition } from "@/types/database";
 import { Annotation } from "@/lib/pdf/signer";
 
-// Dynamically import PDF viewer (client-only, react-pdf requires browser APIs)
+// Dynamically import both signing UIs — react-signature-canvas and react-pdf both
+// access browser APIs at module-init time, which breaks SSR/hydration in production.
+const SignatureCanvasComponent = dynamic(
+  () =>
+    import("@/components/signing/signature-canvas").then(
+      (mod) => mod.SignatureCanvasComponent
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    ),
+  }
+);
+
 const PdfSignatureViewer = dynamic(
   () =>
     import("@/components/signing/pdf-signature-viewer").then(
