@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/resend/client";
 import { generateMagicToken, getMagicTokenExpiry } from "@/lib/utils/magic-token";
 import { signingReminderEmail } from "@/lib/resend/templates";
@@ -85,7 +85,11 @@ export async function POST(
     const newToken = generateMagicToken();
     const newExpiry = getMagicTokenExpiry();
 
-    const { error: updateError } = await supabase
+    // Use the service client for this update: the only RLS UPDATE policy on
+    // signers requires email = auth.email() (signer self-update), so the
+    // authenticated owner client would silently update 0 rows.
+    const serviceSupabase = createServiceClient();
+    const { error: updateError } = await serviceSupabase
       .from("signers")
       .update({ magic_token: newToken, magic_token_expires_at: newExpiry })
       .eq("id", signer_id);
