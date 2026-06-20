@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, degrees } from "pdf-lib";
 import { createServiceClient } from "@/lib/supabase/server";
 
 export interface Annotation {
@@ -18,13 +18,74 @@ interface SignerSignature {
   full_name: string | null;
 }
 
+/**
+ * Converts viewer-space percentage coordinates to the native PDF center point.
+ *
+ * pdfjs (react-pdf) renders the CropBox region and applies the page's /Rotate
+ * flag, so the viewer's (xPct, yPct) are in post-rotation visual space. This
+ * function maps them back to the native (pre-rotation) PDF coordinate system
+ * that pdf-lib uses when drawing.
+ *
+ * Rotation mappings (viewer % → native PDF coordinates):
+ *   R=0:   cx = ox + xPct*pw,         cy = oy + (1-yPct)*ph
+ *   R=90:  cx = ox + (1-yPct)*pw,     cy = oy + (1-xPct)*ph
+ *   R=180: cx = ox + (1-xPct)*pw,     cy = oy + yPct*ph
+ *   R=270: cx = ox + yPct*pw,         cy = oy + xPct*ph
+ */
+function viewerPctToNativeCenter(
+  xPct: number,
+  yPct: number,
+  box: { x: number; y: number; width: number; height: number },
+  rotation: number
+): { cx: number; cy: number; visualW: number; visualH: number } {
+  const { x: ox, y: oy, width: pw, height: ph } = box;
+  const x = xPct / 100;
+  const y = yPct / 100;
+
+  switch (rotation) {
+    case 90:  // 90° CW display: viewer x-axis = native y-axis, viewer y-axis = native x-axis
+      return { cx: ox + pw * y,       cy: oy + ph * x,       visualW: ph, visualH: pw };
+    case 180: // 180° CW display: both axes inverted
+      return { cx: ox + pw * (1 - x), cy: oy + ph * y,       visualW: pw, visualH: ph };
+    case 270: // 270° CW (=90° CCW) display: both viewer axes map to inverted native axes
+      return { cx: ox + pw * (1 - y), cy: oy + ph * (1 - x), visualW: ph, visualH: pw };
+    default:  // 0: straightforward
+      return { cx: ox + pw * x,       cy: oy + ph * (1 - y), visualW: pw, visualH: ph };
+  }
+}
+
+/**
+ * Computes the pdf-lib draw origin (bottom-left of the element before rotation)
+ * so that a W×H element drawn with `rotate: degrees(rotDeg)` is visually
+ * centered at (cx, cy) in native PDF space.
+ *
+ * pdf-lib rotates around the element's own bottom-left corner (x, y), so we
+ * back-calculate (x, y) from the desired center:
+ *   x = cx - W/2·cos(θ) + H/2·sin(θ)
+ *   y = cy - W/2·sin(θ) - H/2·cos(θ)
+ */
+function centeredDrawOrigin(
+  cx: number,
+  cy: number,
+  W: number,
+  H: number,
+  rotDeg: number
+): { x: number; y: number } {
+  const rad = (rotDeg * Math.PI) / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  return {
+    x: cx - (W / 2) * c + (H / 2) * s,
+    y: cy - (W / 2) * s - (H / 2) * c,
+  };
+}
+
 export async function mergeSignaturesOntoPdf(
   originalFilePath: string,
   signers: SignerSignature[]
 ): Promise<string> {
   const supabase = createServiceClient();
 
-  // Download original PDF
   const { data: fileData, error: downloadError } = await supabase.storage
     .from("documents")
     .download(originalFilePath);
@@ -37,7 +98,6 @@ export async function mergeSignaturesOntoPdf(
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const pages = pdfDoc.getPages();
 
-  // Embed Helvetica once for all text annotations
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   for (const signer of signers) {
@@ -46,54 +106,59 @@ export async function mergeSignaturesOntoPdf(
     // ── Embed signature image ──
     const base64Data = signer.signature_data.split(",")[1];
     if (base64Data) {
-      const imageBytes = Uint8Array.from(atob(base64Data), (c) =>
-        c.charCodeAt(0)
-      );
+      const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
       const signatureImage = await pdfDoc.embedPng(imageBytes);
-      const sigWidth = 150;
-      const sigHeight =
-        (signatureImage.height / signatureImage.width) * sigWidth;
 
       if (signer.signature_position) {
         const pageIndex = signer.signature_position.page - 1;
         if (pageIndex >= 0 && pageIndex < pages.length) {
           const page = pages[pageIndex];
-          // Use CropBox when available — pdfjs (react-pdf) renders the CropBox,
-          // so percentages from the viewer are relative to that region, not the full MediaBox.
+          // pdfjs renders the CropBox with the page's /Rotate applied, so
+          // percentages from the viewer are in post-rotation visual space.
           const cropBox = page.getCropBox();
           const mediaBox = page.getMediaBox();
           const box = cropBox ?? mediaBox;
-          const originX = box.x;   // lower-left x of the visible region in PDF space
-          const originY = box.y;   // lower-left y of the visible region in PDF space
-          const pw = box.width;
-          const ph = box.height;
-          // Use the user-set width (% of page) if provided, else default 150pt
-          const resolvedSigWidth = signer.signature_position.width
-            ? (signer.signature_position.width / 100) * pw
-            : sigWidth;
-          const resolvedSigHeight =
-            (signatureImage.height / signatureImage.width) * resolvedSigWidth;
-          // Convert viewer percentages (origin top-left) → PDF coordinate space (origin bottom-left of box)
-          const x = originX + (signer.signature_position.x / 100) * pw - resolvedSigWidth / 2;
-          const y = originY + ph - (signer.signature_position.y / 100) * ph - resolvedSigHeight / 2;
+          const rotation = page.getRotation().angle; // 0 | 90 | 180 | 270
+
+          const { cx, cy, visualW } = viewerPctToNativeCenter(
+            signer.signature_position.x,
+            signer.signature_position.y,
+            box,
+            rotation
+          );
+
+          // Signature width is stored as % of visual page width
+          const sigW = signer.signature_position.width
+            ? (signer.signature_position.width / 100) * visualW
+            : 150;
+          const sigH = (signatureImage.height / signatureImage.width) * sigW;
+
+          // Counter-rotate the image so it appears upright after the viewer
+          // applies the page's own rotation.
+          const compDeg = rotation;
+          const { x: drawX, y: drawY } = centeredDrawOrigin(cx, cy, sigW, sigH, compDeg);
+
           page.drawImage(signatureImage, {
-            x: Math.max(originX, Math.min(x, originX + pw - resolvedSigWidth)),
-            y: Math.max(originY, Math.min(y, originY + ph - resolvedSigHeight)),
-            width: resolvedSigWidth,
-            height: resolvedSigHeight,
+            x: drawX,
+            y: drawY,
+            width: sigW,
+            height: sigH,
+            rotate: degrees(compDeg),
           });
         }
       } else {
-        // Simple mode — stack at bottom-right of page 1
+        // Simple mode — stack at bottom-right of page 1 (no viewer positioning)
         const page = pages[0];
         const { width: pw, height: ph } = page.getSize();
-        const xPos = pw - sigWidth - 40;
-        const yPos = 40 + (signer.signing_order - 1) * (sigHeight + 20);
+        const sigW = 150;
+        const sigH = (signatureImage.height / signatureImage.width) * sigW;
+        const xPos = pw - sigW - 40;
+        const yPos = 40 + (signer.signing_order - 1) * (sigH + 20);
         page.drawImage(signatureImage, {
           x: xPos,
-          y: Math.min(yPos, ph - sigHeight - 10),
-          width: sigWidth,
-          height: sigHeight,
+          y: Math.min(yPos, ph - sigH - 10),
+          width: sigW,
+          height: sigH,
         });
       }
     }
@@ -108,23 +173,35 @@ export async function mergeSignaturesOntoPdf(
         const cropBox = page.getCropBox();
         const mediaBox = page.getMediaBox();
         const box = cropBox ?? mediaBox;
-        const originX = box.x;
-        const originY = box.y;
-        const pw = box.width;
-        const ph = box.height;
+        const rotation = page.getRotation().angle;
+
         // Convert display px → PDF points (approx 0.75 ratio)
         const fontSize = annotation.fontSize ? Math.round(annotation.fontSize * 0.75) : 11;
-
         const textWidth = helvetica.widthOfTextAtSize(annotation.content, fontSize);
-        const cx = originX + (annotation.x / 100) * pw - textWidth / 2;
-        const cy = originY + ph - (annotation.y / 100) * ph - fontSize / 2;
+
+        const { cx, cy } = viewerPctToNativeCenter(
+          annotation.x,
+          annotation.y,
+          box,
+          rotation
+        );
+
+        const compDeg = rotation;
+        const { x: drawX, y: drawY } = centeredDrawOrigin(
+          cx,
+          cy,
+          textWidth,
+          fontSize,
+          compDeg
+        );
 
         page.drawText(annotation.content, {
-          x: Math.max(originX + 4, Math.min(cx, originX + pw - textWidth - 4)),
-          y: Math.max(originY + 4, cy),
+          x: drawX,
+          y: drawY,
           size: fontSize,
           font: helvetica,
           color: rgb(0, 0, 0),
+          rotate: degrees(compDeg),
         });
       }
     }
@@ -180,20 +257,28 @@ export async function bulkMergeSignatureOnPages(
 
   const drawOnPage = (
     page: ReturnType<typeof pdfDoc.getPage>,
-    x: number,
-    y: number,
+    xPct: number,
+    yPct: number,
     widthPct: number = 20
   ) => {
-    const { width: pw, height: ph } = page.getSize();
-    const sigWidth = (widthPct / 100) * pw;
-    const sigHeight = (signatureImage.height / signatureImage.width) * sigWidth;
-    const drawX = (x / 100) * pw - sigWidth / 2;
-    const drawY = ph - (y / 100) * ph - sigHeight / 2;
+    const cropBox = page.getCropBox();
+    const mediaBox = page.getMediaBox();
+    const box = cropBox ?? mediaBox;
+    const rotation = page.getRotation().angle;
+
+    const { cx, cy, visualW } = viewerPctToNativeCenter(xPct, yPct, box, rotation);
+    const sigW = (widthPct / 100) * visualW;
+    const sigH = (signatureImage.height / signatureImage.width) * sigW;
+
+    const compDeg = rotation;
+    const { x: drawX, y: drawY } = centeredDrawOrigin(cx, cy, sigW, sigH, compDeg);
+
     page.drawImage(signatureImage, {
-      x: Math.max(0, Math.min(drawX, pw - sigWidth)),
-      y: Math.max(0, Math.min(drawY, ph - sigHeight)),
-      width: sigWidth,
-      height: sigHeight,
+      x: drawX,
+      y: drawY,
+      width: sigW,
+      height: sigH,
+      rotate: degrees(compDeg),
     });
   };
 
